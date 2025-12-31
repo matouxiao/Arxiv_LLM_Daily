@@ -62,12 +62,36 @@ jobs:
           path: ./data
         continue-on-error: true
 
+      - name: Check and reset if no summary files
+        run: |
+          # 检查是否存在 summary_*.md 格式的文件
+          if [ -d ./data ] && [ -n "$(find ./data -name 'summary_*.md' -type f 2>/dev/null)" ]; then
+            echo "找到 summary_*.md 格式的文件，继续使用现有记录"
+          else
+            echo "未找到 summary_*.md 格式的文件，删除 last_run.json 以强制重新生成"
+            rm -f ./data/last_run.json 2>/dev/null || true
+          fi
+
       - name: Build the data
         env:
           # 读取 GitHub Secrets 中的 API Key
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
         run: python main.py
+      
+      - name: Debug - Check generated files
+        run: |
+          echo "=== 检查 data 目录中的文件 ==="
+          ls -la ./data/ || echo "data 目录不存在"
+          echo ""
+          echo "=== 查找 summary_*.md 文件 ==="
+          find ./data -name "summary_*.md" -type f 2>/dev/null | head -5 || echo "未找到 summary_*.md 文件"
+          echo ""
+          echo "=== 查找所有 .md 文件 ==="
+          find ./data -name "*.md" -type f 2>/dev/null | head -10 || echo "未找到 .md 文件"
+          echo ""
+          echo "=== 检查 last_run.json ==="
+          cat ./data/last_run.json 2>/dev/null || echo "last_run.json 不存在"
       
       - name: Generate site
         # days=30 表示保留最近 30 天的记录在首页归档中
