@@ -38,7 +38,7 @@ jobs:
           import os
           SEARCH_CONFIG = {
               'categories': ['cs.AI'], 
-              'max_total_results': 5, 
+              'max_total_results': 15, 
               'title_only': False, 
               'abstract_only': False, 
               'author_only': False, 
