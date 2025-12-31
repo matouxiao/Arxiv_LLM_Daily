@@ -6,17 +6,20 @@ from pathlib import Path
 from openai import OpenAI  # 必须安装: pip install openai
 
 # ---------------- 配置区域 ----------------
-# 如果你的 config/settings.py 里有 API_KEY，可以保留下面这行导入
-# 如果报错，请直接将 API_KEY 填在下面引号里
 try:
     from config.settings import SEARCH_CONFIG, QUERY, API_KEY, BASE_URL
 except ImportError:
-    # 如果导入失败，请在这里手动填入（这是备用方案）
-    API_KEY = None  # 你的 DeepSeek/DashScope API Key
-    BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1" # 你的 Base URL
+    # 备用默认配置
     SEARCH_CONFIG = {'categories': ['cs.AI'], 'max_total_results': 5}
     QUERY = "LLM"
+    API_KEY = None
+    BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
+# === 关键修正：环境变量覆盖 ===
+# 这行代码的意思是：如果系统环境变量里有 LLM_API_KEY（GitHub 设置的），就用它的；
+# 如果没有，就用上面从 settings 读到的或者 None。
+API_KEY = os.getenv("LLM_API_KEY") or API_KEY
+BASE_URL = os.getenv("LLM_BASE_URL") or BASE_URL
 # ----------------------------------------
 
 # 修复路径问题
