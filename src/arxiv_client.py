@@ -194,22 +194,26 @@ class ArxivClient:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
             
-        # 生成文件名 (例如: 2024-01-01.md)
-        date_str = datetime.now().strftime('%Y-%m-%d')
-        filename = os.path.join(output_dir, f"{date_str}.md")
+        # === 关键修改 ===
+        # 原来的写法: filename = os.path.join(output_dir, f"{date_str}.md")
+        # 修改后的写法 (为了兼容 site_manager.py):
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = os.path.join(output_dir, f"summary_{timestamp}.md")
+        # ===============
         
         print(f"正在保存结果到: {filename}")
         
         try:
             with open(filename, 'w', encoding='utf-8') as f:
-                # 写入标题
-                f.write(f"# Arxiv Daily Paper - {date_str}\n\n")
+                # 写入标题 (正文里显示的标题还是用易读的格式)
+                display_date = datetime.now().strftime('%Y-%m-%d')
+                f.write(f"# Arxiv Daily Paper - {display_date}\n\n")
                 f.write(f"Updated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
                 
                 # 写入每一篇论文
                 for i, paper in enumerate(results, 1):
                     title = paper.get('title', 'No Title')
-                    # 处理链接列表，取第一个或默认
+                    # 处理链接列表
                     links = paper.get('links', [])
                     url = links[0] if links else paper.get('pdf_url', '#')
                     
