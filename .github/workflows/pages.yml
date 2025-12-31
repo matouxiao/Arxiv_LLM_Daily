@@ -32,7 +32,7 @@ jobs:
       - name: Make Configuration
         # 将 example 配置复制为正式配置
         run: |
-          cp ./config/settings.example.py ./config/settings.py
+          cp ./config/settings.py
       
       - name: Restore data from gh-pages branch
         uses: actions/checkout@v4
@@ -45,7 +45,8 @@ jobs:
         env:
           # 读取 GitHub Secrets 中的 API Key
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-        run: arxivsummary
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+        run: python main.py
       
       - name: Generate site
         # days=30 表示保留最近 30 天的记录在首页归档中

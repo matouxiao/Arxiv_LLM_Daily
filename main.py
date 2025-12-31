@@ -1,3 +1,4 @@
+from pickle import NONE
 import sys
 import os
 import datetime
@@ -11,7 +12,7 @@ try:
     from config.settings import SEARCH_CONFIG, QUERY, API_KEY, BASE_URL
 except ImportError:
     # 如果导入失败，请在这里手动填入（这是备用方案）
-    API_KEY = "sk-23dd990461cb4732a264d3bfc398deef"  # 你的 DeepSeek/DashScope API Key
+    API_KEY = None  # 你的 DeepSeek/DashScope API Key
     BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1" # 你的 Base URL
     SEARCH_CONFIG = {'categories': ['cs.AI'], 'max_total_results': 5}
     QUERY = "LLM"
