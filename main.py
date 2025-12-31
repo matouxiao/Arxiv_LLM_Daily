@@ -100,6 +100,8 @@ def main():
 
     if not results:
         print("没有发现新论文。")
+        print("提示：将使用已有的摘要文件生成网站。如果需要重新生成，可以删除 data/last_run.json 文件。")
+        # 即使没有新论文，也继续执行后续步骤（arxivsite 会处理已有文件）
         return
 
     # 4. 逐个翻译论文 (核心步骤)

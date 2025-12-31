@@ -86,7 +86,28 @@ title: {title}
         Returns:
             排序后的文件路径列表
         """
+        # 优先查找 summary_*.md 格式的文件
         summary_files = list(self.data_dir.glob("summary_*.md"))
+        
+        # 如果没有找到 summary_*.md 格式的文件，尝试查找其他 .md 文件（排除 index.md 和 archive.md）
+        if not summary_files:
+            print("未找到 summary_*.md 格式的文件，尝试查找其他格式的摘要文件...")
+            all_md_files = list(self.data_dir.glob("*.md"))
+            # 排除 index.md 和 archive.md
+            summary_files = [f for f in all_md_files 
+                            if f.name not in ['index.md', 'archive.md']]
+            if summary_files:
+                print(f"找到 {len(summary_files)} 个其他格式的摘要文件")
+        
+        # 添加调试输出
+        if summary_files:
+            print(f"找到 {len(summary_files)} 个摘要文件:")
+            for f in summary_files[:5]:  # 只显示前5个
+                print(f"  - {f.name}")
+            if len(summary_files) > 5:
+                print(f"  ... 还有 {len(summary_files) - 5} 个文件")
+        else:
+            print("警告：未找到任何摘要文件！")
         
         # 按照修改时间排序文件（最新的在前）
         if summary_files:
