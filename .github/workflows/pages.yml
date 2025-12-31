@@ -34,8 +34,26 @@ jobs:
         run: |
           mkdir -p config
           touch config/__init__.py
-          echo "SEARCH_CONFIG = {'categories': ['cs.AI'], 'max_total_results': 5, 'title_only': False, 'abstract_only': False, 'author_only': False, 'include_cross_listed': True, 'sort_by': 'SubmittedDate', 'sort_order': 'Descending', 'id_list': None}" > config/settings.py
-          echo "QUERY = 'LLM'" >> config/settings.py
+          cat > config/settings.py << 'EOF'
+          import os
+          SEARCH_CONFIG = {
+              'categories': ['cs.AI'], 
+              'max_total_results': 5, 
+              'title_only': False, 
+              'abstract_only': False, 
+              'author_only': False, 
+              'include_cross_listed': True, 
+              'sort_by': 'SubmittedDate', 
+              'sort_order': 'Descending', 
+              'id_list': None
+          }
+          QUERY = 'LLM'
+          LLM_CONFIG = {
+              'api_key': os.getenv("LLM_API_KEY"),
+              'api_url': os.getenv("LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+              'model': 'deepseek-v3'
+          }
+          EOF
       
       - name: Restore data from gh-pages branch
         uses: actions/checkout@v4

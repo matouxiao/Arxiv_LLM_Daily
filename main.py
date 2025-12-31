@@ -5,9 +5,12 @@ import datetime
 from pathlib import Path
 from openai import OpenAI  # 必须安装: pip install openai
 
-# ---------------- 配置区域 ----------------
+# ---------------- 配置区域 ----------------  
 try:
-    from config.settings import SEARCH_CONFIG, QUERY, API_KEY, BASE_URL
+    from config.settings import SEARCH_CONFIG, QUERY, LLM_CONFIG
+    # 从 LLM_CONFIG 中获取 API_KEY 和 BASE_URL
+    API_KEY = LLM_CONFIG.get('api_key')
+    BASE_URL = LLM_CONFIG.get('api_url', "https://dashscope.aliyuncs.com/compatible-mode/v1")
 except ImportError:
     # 备用默认配置
     SEARCH_CONFIG = {'categories': ['cs.AI'], 'max_total_results': 5}
@@ -69,7 +72,7 @@ def main():
     
     # 1. 初始化 Arxiv 客户端
     try:
-        arxiv_client = ArxivClient()
+        arxiv_client = ArxivClient(SEARCH_CONFIG)
     except Exception as e:
         print(f"初始化 ArxivClient 失败: {e}")
         return
