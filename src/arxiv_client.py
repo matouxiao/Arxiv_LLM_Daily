@@ -190,34 +190,34 @@ class ArxivClient:
         """
         保存搜索结果到 Markdown 文件
         """
+        import os
+        from datetime import datetime
+        
         # 确保输出目录存在
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
             
-        # === 关键修改 ===
-        # 原来的写法: filename = os.path.join(output_dir, f"{date_str}.md")
-        # 修改后的写法 (为了兼容 site_manager.py):
+        # === 关键修改：文件名必须包含 summary_ 前缀 ===
+        # 这样 site_manager.py 才能识别到它
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = os.path.join(output_dir, f"summary_{timestamp}.md")
-        # ===============
+        # ==========================================
         
         print(f"正在保存结果到: {filename}")
         
         try:
             with open(filename, 'w', encoding='utf-8') as f:
-                # 写入标题 (正文里显示的标题还是用易读的格式)
+                # 写入标题
                 display_date = datetime.now().strftime('%Y-%m-%d')
-                f.write(f"# Arxiv Daily Paper - {display_date}\n\n")
+                f.write(f"# Arxiv LLM Daily - {display_date}\n\n")
                 f.write(f"Updated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
                 
                 # 写入每一篇论文
                 for i, paper in enumerate(results, 1):
                     title = paper.get('title', 'No Title')
-                    # 处理链接列表
                     links = paper.get('links', [])
                     url = links[0] if links else paper.get('pdf_url', '#')
                     
-                    # 处理作者列表
                     authors_list = paper.get('authors', [])
                     authors = ", ".join(authors_list) if isinstance(authors_list, list) else str(authors_list)
                     
