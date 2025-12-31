@@ -4,7 +4,6 @@
 import os
 import json
 from typing import List, Dict, Any, Optional
-from pathlib import Path
 import requests
 import time
 from datetime import datetime
@@ -12,18 +11,21 @@ import pytz
 from config.settings import LLM_CONFIG
 
 class ModelClient:
-    """语言模型API客户端"""
+    """兼容 OpenAI 接口格式的 API 客户端 (适配 DashScope/DeepSeek)"""
     
     def __init__(self, api_key: str, model: Optional[str] = None):
         self.api_key = api_key
         self.model = model or LLM_CONFIG['model']
-        self.api_url = f"{LLM_CONFIG['api_url']}/{self.model}:generateContent"
-        self.timeout = LLM_CONFIG.get('timeout', 30)
+        # 自动拼接 chat/completions 端点
+        base_url = LLM_CONFIG['api_url'].rstrip('/')
+        self.api_url = f"{base_url}/chat/completions"
+        self.timeout = LLM_CONFIG.get('timeout', 60)
         
     def _create_headers(self) -> Dict[str, str]:
         """创建请求头"""
         return {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
         }
     
     def _create_request_body(
@@ -32,22 +34,14 @@ class ModelClient:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None
     ) -> Dict[str, Any]:
-        """创建请求体"""
-        # 将最后一条消息作为提示词
-        prompt = messages[-1]["content"]
-        
+        """创建符合 OpenAI 格式的请求体"""
         return {
-            "contents": [{
-                "parts": [{
-                    "text": prompt
-                }]
-            }],
-            "generationConfig": {
-                "temperature": temperature or LLM_CONFIG['temperature'],
-                "maxOutputTokens": max_tokens or LLM_CONFIG['max_output_tokens'],
-                "topP": LLM_CONFIG['top_p'],
-                "topK": LLM_CONFIG['top_k']
-            }
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature or LLM_CONFIG['temperature'],
+            "max_tokens": max_tokens or LLM_CONFIG['max_output_tokens'],
+            # DashScope/OpenAI 通常使用 top_p，不一定需要 top_k，视模型而定
+            "top_p": LLM_CONFIG['top_p']
         }
     
     def chat_completion(
@@ -56,52 +50,55 @@ class ModelClient:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None
     ) -> Dict[str, Any]:
-        """创建聊天完成"""
+        """发送请求并获取回复"""
         headers = self._create_headers()
         data = self._create_request_body(messages, temperature, max_tokens)
         
         for attempt in range(LLM_CONFIG['retry_count']):
             try:
+                # 打印调试信息 (注意不要打印完整的 API Key)
+                print(f"正在调用模型: {self.model}...")
+                
                 response = requests.post(
-                    f"{self.api_url}?key={self.api_key}",
+                    self.api_url,
                     headers=headers,
                     json=data,
                     timeout=self.timeout
                 )
                 
                 if response.status_code != 200:
-                    raise Exception(f"API 调用失败: {response.text}")
+                    raise Exception(f"API 调用失败 [{response.status_code}]: {response.text}")
                     
                 result = response.json()
+                
+                # 解析 OpenAI 格式的响应
+                content = result["choices"][0]["message"]["content"]
                 
                 return {
                     "choices": [{
                         "message": {
                             "role": "assistant",
-                            "content": result["candidates"][0]["content"]["parts"][0]["text"]
+                            "content": content
                         },
                         "finish_reason": "stop"
                     }],
-                    "usage": {
-                        "prompt_tokens": 0,
-                        "completion_tokens": 0,
-                        "total_tokens": 0
-                    }
+                    "usage": result.get("usage", {})
                 }
+                
             except requests.Timeout:
-                print(f"请求超时（{self.timeout}秒），正在重试...")
-                if attempt == LLM_CONFIG['retry_count'] - 1:
-                    raise TimeoutError(f"API调用在{self.timeout}秒内未响应，已重试{LLM_CONFIG['retry_count']}次")
-                time.sleep(LLM_CONFIG['retry_delay'] * (2 ** attempt))
+                print(f"请求超时（{self.timeout}秒），正在重试 ({attempt + 1}/{LLM_CONFIG['retry_count']})...")
+                time.sleep(LLM_CONFIG['retry_delay'])
             except Exception as e:
+                print(f"发生错误: {str(e)}")
                 if attempt == LLM_CONFIG['retry_count'] - 1:
                     raise
-                time.sleep(LLM_CONFIG['retry_delay'] * (2 ** attempt))
+                time.sleep(LLM_CONFIG['retry_delay'])
 
 class PaperSummarizer:
     def __init__(self, api_key: str, model: Optional[str] = None):
         self.client = ModelClient(api_key, model)
-        self.max_papers_per_batch = 25
+        # 根据 Token 限制调整批处理大小，DeepSeek/Qwen 上下文较长，可以设大一点
+        self.max_papers_per_batch = 10 
 
     def _generate_batch_summaries(self, papers: List[Dict[str, Any]], start_index: int) -> str:
         """为一批论文生成总结"""
@@ -113,57 +110,28 @@ class PaperSummarizer:
 作者：{', '.join(paper['authors'])}
 发布日期：{paper['published'][:10]}
 arXiv链接：{paper['entry_id']}
-论文摘要：{paper['summary']}
+摘要：{paper['summary']}
 
 """
-        
-        final_prompt = f"""请为以下{len(papers)}篇论文分别生成markdown语言格式的总结。对每篇论文：
-1. 用一句话说明研究目的
-2. 用一句话说明主要发现
-请用中文回答，保持原有格式，对每篇论文的回答后加入markdown格式的"---"分隔符。
-确保对每篇论文的编号、标题等信息保持不变。
-你的输出环境同时支持markdown和LaTeX语法渲染，可以直接使用LaTeX语法来表示数学公式和符号。请将需要使用LaTeX语法的部分用美元符号$包裹起来，其中若需要下标或上标，请保证将相应的元素用大括号包裹。
-输出格式为：
+        # 修改为更适合 LLM 领域研究者的 Prompt
+        final_prompt = f"""你是一位专注于大语言模型（LLM）的研究员。请阅读以下{len(papers)}篇论文的摘要，并生成中文速读周报。
 
-### [标题](文章链接)
-- **作者:** (作者)
-- **研究目的:** (研究目的)
-- **主要发现:** (主要发现)
+请严格遵循以下 Markdown 格式输出（不要输出任何开场白或结束语）：
+
+### [中文标题](文章链接)
+- **关键词:** (提取3-5个核心技术标签，如: RAG, LoRA, Agent)
+- **解决痛点:** (一句话概括这篇论文试图解决什么具体问题)
+- **核心创新:** (简要列出技术创新点)
+- **一句话总结:** (通俗易懂的结论)
 
 ---
 
-### [标题](文章链接)
-- **作者:** (作者)
-- **研究目的:** (研究目的)
-- **主要发现:** (主要发现)
+请注意：
+1. 直接输出 Markdown 内容，不需要包裹在 ```markdown 代码块中。
+2. 即使原文是英文，也请用**中文**进行总结。
+3. 确保包含原文链接。
 
----
-
-......
-
----
-
-### [标题](文章链接)
-- **作者:** (作者)
-- **研究目的:** (研究目的)
-- **主要发现:** (主要发现)
-
----
-
-请注意，以上是对每篇论文的总结格式示例。请确保输出格式与示例一致。
-
-以下是一个示例：
-
----
-
-### [Lattice models with subsystem/weak non-invertible symmetry-protected topological order](http://arxiv.org/abs/2505.11419v1)
-- **作者:** Yuki Furukawa
-- **研究目的:** 构建具有子系统非可逆对称性保护拓扑 (SPT) 序的格点模型，并研究其界面模式以及弱SPT相。
-- **主要发现:** 构建了一系列具有子系统非可逆SPT序的格点模型，并展示了由平移对称性和非可逆对称性组合区分的弱SPT相之间的界面存在奇异的Lieb-Schultz-Mattis反常。
-
----
-
-请根据以下论文信息生成总结：
+待处理论文列表：
 {batch_prompt}"""
 
         try:
@@ -173,29 +141,16 @@ arXiv链接：{paper['entry_id']}
             }])
             return response["choices"][0]["message"]["content"].strip()
         except Exception as e:
-            # 如果批处理失败，生成错误信息
-            error_summaries = []
-            for i, paper in enumerate(papers, start=start_index):
-                error_summaries.append(f"""
-论文 {i}：
-标题：{paper['title']}
-作者：{', '.join(paper['authors'])}
-发布日期：{paper['published'][:10]}
-arXiv链接：{paper['pdf_url']}
-研究目的：[生成失败: {str(e)}]
-主要发现：[生成失败: {str(e)}]
----""")
-            return "\n".join(error_summaries)
+            print(f"批处理生成失败: {e}")
+            return f"**[本批次生成失败]** 错误信息: {str(e)}"
 
     def _process_batch(self, papers: List[Dict[str, Any]], start_index: int) -> str:
-        """处理一批论文"""
         print(f"正在批量处理 {len(papers)} 篇论文...")
         summaries = self._generate_batch_summaries(papers, start_index)
-        time.sleep(2)  # 在批次之间添加短暂延迟
+        time.sleep(1) 
         return summaries
 
     def _generate_batch_summary(self, papers: List[Dict[str, Any]]) -> str:
-        """批量生成所有论文的总结"""
         all_summaries = []
         total_papers = len(papers)
         
@@ -205,96 +160,43 @@ arXiv链接：{paper['pdf_url']}
             batch_summary = self._process_batch(batch, i + 1)
             all_summaries.append(batch_summary)
             
-            if i + self.max_papers_per_batch < total_papers:
-                print("批次处理完成，等待3秒后继续...")
-                time.sleep(3)  # 批次之间的冷却时间
-        
         return "\n".join(all_summaries)
 
     def summarize_papers(self, papers: List[Dict[str, Any]], output_file: str) -> bool:
-        """
-        批量处理所有论文并创建Markdown报告
-        
-        Args:
-            papers: 论文列表
-            output_file: 输出文件路径
-            
-        Returns:
-            bool: 摘要生成是否真正成功。如果生成的摘要包含错误信息则返回False
-        """
-        api_success = True  # 标记API调用是否成功
-        
         try:
-            # 生成总结内容
             print(f"开始生成论文总结，共 {len(papers)} 篇...")
             summaries = self._generate_batch_summary(papers)
             
-            # 检查生成的摘要是否包含错误信息
-            if "[生成失败:" in summaries:
-                api_success = False
-                print("警告: 摘要生成过程中出现错误，结果可能不完整")
-            
-            # 转换为markdown格式
             markdown_content = self._generate_markdown(papers, summaries)
             
-            # 保存为markdown文件
-            output_md = output_file.replace('.pdf', '.md')
+            # 更改扩展名处理逻辑
+            output_md = str(Path(output_file).with_suffix('.md'))
+            
             with open(output_md, 'w', encoding='utf-8') as f:
                 f.write(markdown_content)
             print(f"Markdown文件已保存：{output_md}")
             
-            return api_success
+            return True
             
         except Exception as e:
-            # 如果生成总结失败，保存基本信息为markdown格式
-            beijing_time = datetime.now(pytz.timezone('Asia/Shanghai')).strftime('%Y-%m-%d %H:%M:%S')
-            error_content = f"""# Arxiv论文总结报告
-
-生成时间：{beijing_time}
-
-**生成总结时发生错误，以下是论文基本信息：**
-
-"""
-            for i, paper in enumerate(papers, 1):
-                error_content += f"""
-## 论文 {i}：
-- 标题：{paper['title']}
-- 作者：{', '.join(paper['authors'])}
-- 发布日期：{paper['published'][:10]}
-- arXiv链接：{paper['pdf_url']}
-
-"""
-            
-            # 保存错误信息为markdown文件
-            error_md = output_file.replace('.pdf', '_error.md')
-            with open(error_md, 'w', encoding='utf-8') as f:
-                f.write(error_content)
-            print(f"发生错误，已保存基本信息到：{error_md}")
-            
-            return False  # 发生异常，摘要生成肯定失败
+            print(f"严重错误: {e}")
+            return False
 
     def _generate_markdown(self, papers: List[Dict[str, Any]], summaries: str) -> str:
-        """生成markdown格式的报告"""
         beijing_time = datetime.now(pytz.timezone('Asia/Shanghai')).strftime('%Y-%m-%d %H:%M:%S')
         
-        markdown_content = f"""# Arxiv论文总结报告
+        return f"""# LLM 前沿论文周报
 
-## 基本信息
-- 生成时间：{beijing_time}
-- 使用模型：{self.client.model}
-- 论文数量：{len(papers)} 篇
+> 更新时间：{beijing_time}
+> 
+> 本周精选了 {len(papers)} 篇关于大模型 (LLM) 的最新论文。
 
 ---
-
-## 论文总结
 
 {summaries}
 
 ---
-
-## 生成说明
-- 本报告由AI模型自动生成
-- 每篇论文的总结包含研究目的和主要发现
-- 如有错误或遗漏请以原文为准
+*Generated by AI Agent based on arXiv (cs.CL)*
 """
-        return markdown_content
+def create_summarizer(api_key: str, model: Optional[str] = None):
+    return PaperSummarizer(api_key, model)

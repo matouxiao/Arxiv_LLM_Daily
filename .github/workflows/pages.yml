@@ -1,9 +1,10 @@
 name: pages
 on:
   schedule:
-    # Runs at 12:00 PM Beijing Time (UTC+8) from Monday to Friday
-    - cron: '0 4 * * 1-5'
-  # Or you can trigger it manually
+    # 每天 UTC 时间 02:00 运行 (即北京时间 10:00)
+    # 之前是 '0 2 * * 5' (每周五)，现在改为 '0 2 * * *' (每天)
+    - cron: '0 1 * * *'
+  # 允许手动触发
   workflow_dispatch:
 
 jobs:
@@ -22,19 +23,6 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
 
-      - name: Get pip cache dir
-        id: pip-cache
-        run: |
-          echo "dir=$(pip cache dir)" >> $GITHUB_OUTPUT
-          
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.pip-cache.outputs.dir }}
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
       - name: Install dependencies
         run: pip install -r requirements.txt
 
@@ -42,35 +30,27 @@ jobs:
         run: pip install -e .
 
       - name: Make Configuration
+        # 将 example 配置复制为正式配置
         run: |
           cp ./config/settings.example.py ./config/settings.py
-          sed -i '1i import os' ./config/settings.py
-          sed -i 's/"YOUR_API_HERE"/os.getenv("LLM_API_KEY")/' ./config/settings.py
       
-      # Cache the built data
-      #- name: Cache build
-      #  uses: actions/cache@v4
-      #  with:
-      #    path: ./data
-      #    key: ${{ runner.os }}-dist-${{ github.run_id }}
-      #    restore-keys: |
-      #      ${{ runner.os }}-dist-
       - name: Restore data from gh-pages branch
         uses: actions/checkout@v4
         with:
           ref: gh-pages
           path: ./data
-        # skip this process if gh-pages does not exist at the first run
         continue-on-error: true
 
       - name: Build the data
         env:
+          # 读取 GitHub Secrets 中的 API Key
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
         run: arxivsummary
       
-      # Use site_manager to manage the site
       - name: Generate site
-        run: arxivsite --data-dir ./data --github-dir ./.github --days 7
+        # days=30 表示保留最近 30 天的记录在首页归档中
+        # 既然是日报，保留一个月的数据比较合理
+        run: arxivsite --data-dir ./data --github-dir ./.github --days 30
       
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3

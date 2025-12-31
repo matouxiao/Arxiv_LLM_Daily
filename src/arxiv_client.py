@@ -185,3 +185,47 @@ class ArxivClient:
             print(f"找到 {len(all_results)} 篇新论文")
 
         return all_results
+
+    def save_results(self, results: List[Dict[str, Any]], output_dir: str, metadata_file: str = None):
+        """
+        保存搜索结果到 Markdown 文件
+        """
+        # 确保输出目录存在
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            
+        # 生成文件名 (例如: 2024-01-01.md)
+        date_str = datetime.now().strftime('%Y-%m-%d')
+        filename = os.path.join(output_dir, f"{date_str}.md")
+        
+        print(f"正在保存结果到: {filename}")
+        
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                # 写入标题
+                f.write(f"# Arxiv Daily Paper - {date_str}\n\n")
+                f.write(f"Updated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                
+                # 写入每一篇论文
+                for i, paper in enumerate(results, 1):
+                    title = paper.get('title', 'No Title')
+                    # 处理链接列表，取第一个或默认
+                    links = paper.get('links', [])
+                    url = links[0] if links else paper.get('pdf_url', '#')
+                    
+                    # 处理作者列表
+                    authors_list = paper.get('authors', [])
+                    authors = ", ".join(authors_list) if isinstance(authors_list, list) else str(authors_list)
+                    
+                    summary = paper.get('summary', 'No summary available.').replace('\n', ' ')
+                    
+                    f.write(f"## {i}. {title}\n")
+                    f.write(f"- **Authors**: {authors}\n")
+                    f.write(f"- **Link**: {url}\n")
+                    f.write(f"- **Summary**: {summary}\n\n")
+                    f.write("---\n\n")
+                    
+            print(f"成功保存 {len(results)} 篇论文到 {filename}")
+            
+        except Exception as e:
+            print(f"保存结果时出错: {e}")
