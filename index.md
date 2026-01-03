@@ -3,7 +3,7 @@ layout: default
 title: Arxiv LLM Daily - 2026-01-01
 ---
 
-[查看所有摘要归档](archive.md) | 更新日期: 2026-01-02
+[查看所有摘要归档](archive.md) | 更新日期: 2026-01-03
 
 # Arxiv LLM Daily - 2026-01-01
 
