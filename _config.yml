@@ -1,0 +1,11 @@
+# 使用GitHub Pages默认主题 - Cayman
+theme: jekyll-theme-cayman
+title: ArXiv Summary Daily
+description: "每日自动检索和总结arXiv论文的工具，使用AI生成论文摘要。\n本页面专注于大语言模型(LLM)、生成式AI和自然语言处理相关的最新研究。"
+author: dong-zehao
+
+kramdown:
+  input: GFM
+  hard_wrap: false
+  syntax_highlighter: rouge
+  math_engine: nil
