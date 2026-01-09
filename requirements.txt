@@ -1,0 +1,11 @@
+arxiv>=1.4.7
+requests>=2.31.0
+python-dotenv>=1.0.0
+markdown>=3.4.3
+pathlib>=1.0.1
+python-dateutil>=2.8.2
+pytz>=2022.1
+openai
+PyMuPDF>=1.23.0  # 用于 PDF 文本提取
+scikit-learn>=1.0.0  # 用于聚类分析
+numpy>=1.21.0  # 用于数值计算

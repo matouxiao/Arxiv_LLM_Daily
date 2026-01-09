@@ -1,0 +1,174 @@
+name: pages
+on:
+  schedule:
+    # 每天 UTC 时间 01:00 运行 (即北京时间 9:00)
+    - cron: '17 23 * * *'
+  # 允许手动触发
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: write
+      pages: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Make Configuration
+        # 创建配置文件，与本地 config/settings.py 保持一致
+        run: |
+          mkdir -p config
+          touch config/__init__.py
+          cat > config/settings.py << 'EOF'
+          """
+          ArXiv API 配置文件 - LLM Edition
+          """
+          import os
+          from dotenv import load_dotenv
+          load_dotenv()
+          
+          CATEGORIES = [
+              "cs.CL",
+              "cs.AI",
+              "cs.LG",
+              "cs.CV",
+              "cs.NE",
+              "cs.DC",
+              "cs.AR",
+              "cs.IR",
+              "cs.RO",
+              "cs.CR",
+              "cs.SE"
+          ]
+          
+          # arXiv API 搜索配置
+          SEARCH_CONFIG = {
+              'categories': CATEGORIES, 
+              'max_total_results': 20,
+              'sort_by': 'SubmittedDate',
+              'sort_order': 'Ascending',
+              'include_cross_listed': True,
+              'abstracts': True,
+              'id_list': None,
+              'title_only': False,
+              'author_only': False,
+              'abstract_only': False,
+              'search_mode': 'all',
+              'days_back': 2,
+          }
+          
+          # 搜索查询配置 (核心筛选逻辑)
+          QUERY = '("Large Language Model" OR "LLM" OR "Generative AI" OR "Transformer" OR "RAG" OR "Chain of Thought")'
+          
+          # 语言模型API配置 (DashScope / DeepSeek)
+          LLM_CONFIG = {
+              'api_key': os.getenv("LLM_API_KEY"),
+              'model': 'deepseek-v3',
+              'api_url': os.getenv("LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+              'temperature': 0.3,
+              'max_output_tokens': 4000,
+              'top_p': 0.8,
+              'top_k': 40,
+              'retry_count': 3,
+              'retry_delay': 5,
+              'timeout': 120,
+          }
+          
+          # 输出配置
+          OUTPUT_DIR = "data"
+          LAST_RUN_FILE = "last_run.json"
+          METADATA_FILE = "metadata.json"
+          LLM_API_KEY = LLM_CONFIG['api_key']
+          
+          # PDF 处理配置
+          PDF_CONFIG = {
+              'extract_key_sections': True,
+              'max_chars': 20000,
+          }
+          
+          # Embedding API 配置
+          EMBEDDING_CONFIG = {
+              'api_url': 'http://42.193.243.252:8006/v1/embeddings',
+              'timeout': 30,
+              'batch_size': 200,
+          }
+          
+          # 聚类配置
+          CLUSTERING_CONFIG = {
+              'method': 'kmeans',
+              'n_clusters': 4,
+              'eps': 0.28,
+              'min_samples': 2,
+              'n_jobs': -1,
+              'top_clusters': 5,
+          }
+          EOF
+      
+      - name: Restore data from gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: ./data
+        continue-on-error: true
+
+      - name: Check data directory
+        run: |
+          # 检查是否存在 summary_*.md 格式的文件
+          if [ -d ./data ] && [ -n "$(find ./data -name 'summary_*.md' -type f 2>/dev/null)" ]; then
+            echo "找到 summary_*.md 格式的文件，继续使用现有记录"
+          else
+            echo "未找到 summary_*.md 格式的文件，将生成新的摘要"
+          fi
+
+      - name: Build the data
+        env:
+          # 读取 GitHub Secrets 中的 API Key
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          # 新增飞书邮件配置
+          SMTP_SERVER: 'smtp.feishu.cn'
+          SMTP_PORT: '465'
+          SENDER_EMAIL: 'xiaojingze@comein.cn'
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }} # 飞书应用专用密码
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+        run: python main.py
+       
+      - name: Debug - Check generated files
+        run: |
+          echo "=== 检查 data 目录中的文件 ==="
+          ls -la ./data/ || echo "data 目录不存在"
+          echo ""
+          echo "=== 查找 summary_*.md 文件 ==="
+          find ./data -name "summary_*.md" -type f 2>/dev/null | head -5 || echo "未找到 summary_*.md 文件"
+          echo ""
+          echo "=== 查找所有 .md 文件 ==="
+          find ./data -name "*.md" -type f 2>/dev/null | head -10 || echo "未找到 .md 文件"
+      
+      - name: Generate site
+        # days=30 表示保留最近 30 天的记录在首页归档中
+        # 既然是日报，保留一个月的数据比较合理
+        run: arxivsite --data-dir ./data --github-dir ./.github --days 30
+      
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./data
+          publish_branch: gh-pages
+          enable_jekyll: true
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
