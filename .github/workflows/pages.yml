@@ -58,7 +58,7 @@ jobs:
           # arXiv API 搜索配置
           SEARCH_CONFIG = {
               'categories': CATEGORIES, 
-              'max_total_results': 20,
+              'max_total_results': 58,
               'sort_by': 'SubmittedDate',
               'sort_order': 'Ascending',
               'include_cross_listed': True,
