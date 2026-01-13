@@ -68,7 +68,7 @@ jobs:
               'author_only': False,
               'abstract_only': False,
               'search_mode': 'all',
-              'days_back': 2,
+              'days_back': 3,
           }
           
           # 搜索查询配置 (核心筛选逻辑)
