@@ -427,7 +427,7 @@ class ArxivClient:
             processed_count = 0  # 实际处理的论文数量（用于限制）
             
             # 如果没有上次记录，说明是第一次运行
-            if not last_processed_id:
+            if not last_processed_id or (last_processed_id and not found_last_processed):
                 found_last_processed = True
                 print("首次运行，从头开始处理论文")
 
@@ -489,15 +489,7 @@ class ArxivClient:
                 except Exception as e:
                     print(f"处理单篇文章时出错: {e}")
                     continue
-            
-            # === 处理特殊情况：遍历完所有论文都没找到上次记录 ===
-            if last_processed_id and not found_last_processed:
-                print(f"⚠️ 遍历了 {total_found} 篇论文，未找到上次记录 (ID: {last_processed_id})")
-                print(f"   可能原因：搜索范围已越过上次记录，或记录的论文已被删除")
-                print(f"   将重新处理所有论文（最多 {self.config['max_total_results']} 篇）")
-                print(f"   建议：删除 {self.processed_papers_file} 后重新运行")
-            # =========================================================
-                
+           
         except Exception as e:
             print(f"搜索过程出错: {e}")
             print(f"错误类型: {type(e)}")
