@@ -238,7 +238,9 @@ arXiv链接：{paper['entry_id']}
             print(f"批处理生成失败: {e}")
             import traceback
             traceback.print_exc()
-            return f"**[本批次生成失败]** 错误信息: {str(e)}"
+            # 修复：返回元组格式，而不是字符串
+            error_text = f"**[本批次生成失败]** 错误信息: {str(e)}"
+            return error_text, []
 
     def _format_papers_from_json(self, json_content: str, papers: List[Dict[str, Any]], start_index: int):
         """从 JSON 内容组装成固定格式的 Markdown，同时返回结构化数据
@@ -253,23 +255,103 @@ arXiv链接：{paper['entry_id']}
                 json_content = re.sub(r'^```(?:json)?\s*\n', '', json_content)
                 json_content = re.sub(r'\n```\s*$', '', json_content)
         
-        # === 新增：强制清洗非法字符 ===
-        # 移除 JSON 字符串值中可能存在的未转义换行符（将其替换为空格）
-        # 注意：这里只处理简单的格式问题
-            json_content = json_content.replace('\n', ' ').replace('\r', '') 
-        # 恢复被误删的结构化换行（可选，为了解析更稳健）
-            json_content = re.sub(r'}\s*{', '},{', json_content) 
-        
-        # 2. 尝试解析
+            # 2. 尝试直接解析（优先策略）
             try:
                 paper_data_list = json.loads(json_content)
-            except json.JSONDecodeError:
-            # 容错：如果还是不行，尝试提取最外层的 [ ]
-                match = re.search(r'\[.*\]', json_content, re.DOTALL)
-                if match:
-                    paper_data_list = json.loads(match.group(0))
-                else:
-                    raise
+            except json.JSONDecodeError as e1:
+                # 如果直接解析失败，尝试清理后再解析
+                print(f"直接解析失败，尝试清理: {e1}")
+                
+                # 改进的 JSON 清理策略：只清理字符串值内的未转义换行符
+                # 使用正则表达式匹配并修复字符串值内的换行符
+                def fix_string_newlines(match):
+                    """修复字符串值内的未转义换行符"""
+                    full_match = match.group(0)
+                    # 如果字符串内包含未转义的换行符，替换为空格
+                    if '\n' in full_match and '\\n' not in full_match:
+                        # 将未转义的换行符替换为空格
+                        fixed = full_match.replace('\n', ' ').replace('\r', ' ')
+                        # 合并多个连续空格
+                        fixed = re.sub(r'\s+', ' ', fixed)
+                        return fixed
+                    return full_match
+                
+                # 匹配 JSON 字符串值（双引号内的内容，考虑转义）
+                # 这个正则表达式匹配完整的字符串值，包括转义字符
+                json_content_cleaned = json_content
+                
+                # 先尝试修复字符串值内的换行符
+                # 使用更安全的方法：逐字符处理
+                result = []
+                i = 0
+                in_string = False
+                escape_next = False
+                
+                while i < len(json_content):
+                    char = json_content[i]
+                    
+                    if escape_next:
+                        result.append(char)
+                        escape_next = False
+                        i += 1
+                        continue
+                    
+                    if char == '\\':
+                        result.append(char)
+                        escape_next = True
+                        i += 1
+                        continue
+                    
+                    if char == '"':
+                        in_string = not in_string
+                        result.append(char)
+                        i += 1
+                        continue
+                    
+                    if in_string and (char == '\n' or char == '\r'):
+                        # 在字符串内的未转义换行符，替换为空格
+                        result.append(' ')
+                        i += 1
+                        continue
+                    
+                    result.append(char)
+                    i += 1
+                
+                json_content_cleaned = ''.join(result)
+                
+                # 清理 JSON 结构外的多余空白（对象/数组之间的换行）
+                json_content_cleaned = re.sub(r'\s*}\s*{', '},{', json_content_cleaned)
+                json_content_cleaned = re.sub(r'\s*]\s*\[', '],[', json_content_cleaned)
+                
+                # 再次尝试解析
+                try:
+                    paper_data_list = json.loads(json_content_cleaned)
+                except json.JSONDecodeError as e2:
+                    # 如果还是失败，尝试提取最外层的 [ ]
+                    print(f"清理后仍解析失败: {e2}")
+                    match = re.search(r'\[.*\]', json_content_cleaned, re.DOTALL)
+                    if match:
+                        try:
+                            paper_data_list = json.loads(match.group(0))
+                        except json.JSONDecodeError as e3:
+                            # 最后尝试：使用修复方法
+                            print(f"提取数组后仍解析失败: {e3}")
+                            fixed_json = self._fix_json_common_errors(match.group(0))
+                            paper_data_list = json.loads(fixed_json)
+                    else:
+                        raise e2
+            
+            # 验证解析结果
+            if not isinstance(paper_data_list, list):
+                raise ValueError(f"解析结果不是数组，而是 {type(paper_data_list)}")
+            
+            if len(paper_data_list) != len(papers):
+                print(f"警告：解析出的论文数量 ({len(paper_data_list)}) 与预期 ({len(papers)}) 不匹配，将使用实际解析的数量")
+                # 如果解析出的数量少于预期，只处理解析出的部分
+                # 如果解析出的数量多于预期，只处理预期的部分
+                min_len = min(len(paper_data_list), len(papers))
+                paper_data_list = paper_data_list[:min_len]
+                papers = papers[:min_len]
             
             # 组装成固定格式
             formatted_papers = []
@@ -303,20 +385,102 @@ arXiv链接：{paper['entry_id']}
             
         except json.JSONDecodeError as e:
             print(f"JSON 解析失败: {e}")
-            print(f"原始内容: {json_content[:500]}...")
-            # 如果 JSON 解析失败，尝试提取并重试
-            # 查找 JSON 数组部分
+            print(f"原始内容前500字符: {json_content[:500]}")
+            if len(json_content) > 500:
+                print(f"原始内容后500字符: {json_content[-500:]}")
+            # 尝试更激进的修复策略
             json_match = re.search(r'\[.*\]', json_content, re.DOTALL)
             if json_match:
                 try:
-                    paper_data_list = json.loads(json_match.group(0))
-                    return self._format_papers_from_json(json_match.group(0), papers, start_index)
-                except:
-                    pass
+                    fixed_json = self._fix_json_common_errors(json_match.group(0))
+                    paper_data_list = json.loads(fixed_json)
+                    # 如果修复成功，继续处理
+                    formatted_papers = []
+                    enriched_papers = []
+                    for i, (paper, paper_data) in enumerate(zip(papers, paper_data_list)):
+                        paper_num = start_index + i
+                        decision = paper_data.get('decision', '未评估')
+                        formatted_paper = f"""## {paper_num}. {paper['title']}
+- **中文标题**: {paper_data.get('chinese_title', '')}
+- **Link**: {paper['entry_id']}
+- **推荐决策:** {decision}
+- **决策理由:** {paper_data.get('decision_reason', '')}
+- **关键词:** {paper_data.get('keywords', '')}
+- **核心痛点:** {paper_data.get('core_pain_point', '')}
+- **应用价值:** {paper_data.get('application_value', '')}
+- **总结:** {paper_data.get('summary', '')}
+- **技术创新:** {paper_data.get('technical_innovation', '')}
+
+---"""
+                        formatted_papers.append(formatted_paper)
+                        enriched_paper = {**paper, **paper_data}
+                        enriched_papers.append(enriched_paper)
+                    return "\n\n".join(formatted_papers), enriched_papers
+                except Exception as e2:
+                    print(f"修复后仍解析失败: {e2}")
+                    import traceback
+                    traceback.print_exc()
+            # 如果所有尝试都失败，抛出异常
             raise
         except Exception as e:
             print(f"格式化失败: {e}")
+            import traceback
+            traceback.print_exc()
             raise
+
+    def _fix_json_common_errors(self, json_str: str) -> str:
+        """修复常见的 JSON 格式错误"""
+        # 修复未转义的换行符（在字符串值内）
+        result = []
+        i = 0
+        in_string = False
+        escape_next = False
+        
+        while i < len(json_str):
+            char = json_str[i]
+            
+            if escape_next:
+                result.append(char)
+                escape_next = False
+                i += 1
+                continue
+            
+            if char == '\\':
+                result.append(char)
+                escape_next = True
+                i += 1
+                continue
+            
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                result.append(char)
+                i += 1
+                continue
+            
+            if in_string and (char == '\n' or char == '\r'):
+                # 在字符串内的换行符替换为空格
+                result.append(' ')
+                i += 1
+                continue
+            
+            result.append(char)
+            i += 1
+        
+        fixed_json = ''.join(result)
+        
+        # 修复常见的逗号问题
+        fixed_json = re.sub(r',\s*}', '}', fixed_json)  # 移除对象末尾多余的逗号
+        fixed_json = re.sub(r',\s*]', ']', fixed_json)  # 移除数组末尾多余的逗号
+        
+        # 修复未闭合的引号（简单处理）
+        # 统计引号数量，如果奇数则尝试修复
+        quote_count = fixed_json.count('"')
+        if quote_count % 2 != 0:
+            # 尝试在末尾添加引号
+            if not fixed_json.rstrip().endswith('"'):
+                fixed_json = fixed_json.rstrip() + '"'
+        
+        return fixed_json
 
     def _process_batch(self, papers: List[Dict[str, Any]], start_index: int):
         """处理一批论文，返回格式化文本和结构化数据
