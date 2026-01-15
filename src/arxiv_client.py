@@ -146,7 +146,7 @@ class ArxivClient:
     
     def download_and_extract_pdf_text(self, pdf_url: str, max_pages: int = 20) -> Optional[str]:
         """
-        下载 PDF 并提取特定章节（Introduction, Related Work, Conclusion）
+        下载 PDF 并提取特定章节（Introduction, Related Work, Method, Conclusion）
         
         Args:
             pdf_url: PDF 下载链接
@@ -190,7 +190,7 @@ class ArxivClient:
             else:
                 print("未找到目标章节，返回前5000字符作为摘要")
                 # 如果找不到章节，返回前几页作为摘要
-                return all_text[:5000] if len(all_text) > 5000 else all_text
+                return all_text[:10000] if len(all_text) > 10000 else all_text
             
         except requests.Timeout:
             print(f"PDF 下载超时: {pdf_url[:60]}")
@@ -201,7 +201,7 @@ class ArxivClient:
 
     def _extract_key_sections(self, text: str) -> Optional[str]:
         """
-        从论文文本中提取 Introduction、Related Work 和 Conclusion 章节
+        从论文文本中提取 Introduction、Related Work、Method 和 Conclusion 章节
         
         Args:
             text: 完整的论文文本
@@ -221,6 +221,15 @@ class ArxivClient:
                 r'(?i)^\s*(?:2\.?\s*)?related\s+works\s*$',
                 r'(?i)^\s*(?:2\.?\s*)?related\s+literature\s*$',
                 r'(?i)^\s*(?:2\.?\s*)?background\s*$',
+            ],
+            'method': [
+                r'(?i)^\s*(?:3\.?\s*)?method\s*$',
+                r'(?i)^\s*(?:3\.?\s*)?methods\s*$',
+                r'(?i)^\s*(?:3\.?\s*)?methodology\s*$',
+                r'(?i)^\s*(?:3\.?\s*)?approach\s*$',
+                r'(?i)^\s*(?:3\.?\s*)?proposed\s+method\s*$',
+                r'(?i)^\s*(?:3\.?\s*)?our\s+method\s*$',
+                r'(?i)^\s*(?:3\.?\s*)?methodology\s+and\s+approach\s*$',
             ],
             'conclusion': [
                 r'(?i)^\s*(?:[0-9]+\.?\s*)?conclusion\s*$',
@@ -309,12 +318,13 @@ class ArxivClient:
             result_parts = []
             section_names = {
                 'introduction': 'Introduction', 
-                'related_work': 'Related Work', 
+                'related_work': 'Related Work',
+                'method': 'Method',
                 'conclusion': 'Conclusion'
             }
             
             # 按顺序提取章节
-            for key in ['introduction', 'related_work', 'conclusion']:
+            for key in ['introduction', 'related_work', 'method', 'conclusion']:
                 if key in sections:
                     # 限制每个章节的长度（避免过长）
                     section_text = sections[key]
@@ -452,10 +462,10 @@ class ArxivClient:
                         print(f"已处理 {processed_count} 篇新论文，达到配置的最大数量 ({self.config['max_total_results']})，停止处理")
                         break
                     
-                    # 下载并提取 PDF 关键章节（摘要、Introduction、Related Work、Conclusion）
+                    # 下载并提取 PDF 关键章节（摘要、Introduction、Related Work、Method、Conclusion）
                     full_text = None
                     if paper.pdf_url:
-                        # 提取关键章节：Introduction、Related Work、Conclusion
+                        # 提取关键章节：Introduction、Related Work、Method、Conclusion
                         pdf_sections = self.download_and_extract_pdf_text(paper.pdf_url, max_pages=20)
                         
                         # 组合摘要和PDF章节
