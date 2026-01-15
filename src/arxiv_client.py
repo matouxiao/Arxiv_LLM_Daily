@@ -188,9 +188,9 @@ class ArxivClient:
                 print(f"PDF 章节提取成功：找到关键章节")
                 return sections
             else:
-                print("未找到目标章节，返回前5000字符作为摘要")
+                print("未找到目标章节，返回前20000字符作为摘要")
                 # 如果找不到章节，返回前几页作为摘要
-                return all_text[:10000] if len(all_text) > 10000 else all_text
+                return all_text[:20000] if len(all_text) > 20000 else all_text
             
         except requests.Timeout:
             print(f"PDF 下载超时: {pdf_url[:60]}")
@@ -328,8 +328,8 @@ class ArxivClient:
                 if key in sections:
                     # 限制每个章节的长度（避免过长）
                     section_text = sections[key]
-                    if len(section_text) > 3000:
-                        section_text = section_text[:3000] + "\n\n[注：章节内容已截断]"
+                    if len(section_text) > 8000:
+                        section_text = section_text[:8000] + "\n\n[注：章节内容已截断]"
                     result_parts.append(f"=== {section_names[key]} ===\n{section_text}")
             
             return '\n\n'.join(result_parts)
