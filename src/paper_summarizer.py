@@ -486,12 +486,29 @@ arXiv链接：{paper['entry_id']}
         """处理一批论文，返回格式化文本和结构化数据
         
         Returns:
-            tuple: (summaries_text, paper_data_list)
+            tuple: (summaries_text, paper_data_list) - 如果失败，paper_data_list 为空列表
         """
         print(f"正在批量处理 {len(papers)} 篇论文...")
-        summaries_text, paper_data_list = self._generate_batch_summaries(papers, start_index)
-        time.sleep(1) 
-        return summaries_text, paper_data_list
+        try:
+            summaries_text, paper_data_list = self._generate_batch_summaries(papers, start_index)
+            time.sleep(1) 
+            return summaries_text, paper_data_list
+        except Exception as e:
+            print(f"❌ 批次处理失败（第 {start_index} 到 {start_index + len(papers) - 1} 篇），跳过该批次继续处理: {e}")
+            import traceback
+            traceback.print_exc()
+            # 生成一个错误提示的摘要文本
+            error_summary = f"""## ⚠️ 批次处理失败（第 {start_index} 到 {start_index + len(papers) - 1} 篇）
+
+**错误信息**: {str(e)}
+
+**受影响的论文**:
+"""
+            for i, paper in enumerate(papers, start=start_index):
+                error_summary += f"- {i}. [{paper.get('title', 'Unknown')}]({paper.get('entry_id', '#')})\n"
+            
+            error_summary += "\n---"
+            return error_summary, []
 
     def _fix_batch_format(self, text: str, start_index: int, batch_size: int) -> str:
         """修正批次格式（保留作为兼容性方法，现在格式已由代码控制）"""
@@ -509,20 +526,54 @@ arXiv链接：{paper['entry_id']}
         all_summaries = []
         all_paper_data = []
         total_papers = len(papers)
+        failed_batches = 0
         
         for i in range(0, total_papers, self.max_papers_per_batch):
             batch = papers[i:i + self.max_papers_per_batch]
             print(f"\n正在处理第 {i + 1} 到 {min(i + self.max_papers_per_batch, total_papers)} 篇论文...")
-            batch_summary, batch_paper_data = self._process_batch(batch, i + 1)
             
-            # 后处理：修正序号和格式
-            batch_summary = self._fix_batch_format(batch_summary, i + 1, len(batch))
-            
-            all_summaries.append(batch_summary)
-            all_paper_data.extend(batch_paper_data)
+            try:
+                batch_summary, batch_paper_data = self._process_batch(batch, i + 1)
+                
+                # 检查是否处理成功（通过检查 paper_data_list 是否为空来判断）
+                if not batch_paper_data:
+                    # 如果返回空列表，说明处理失败，但已经有错误信息了
+                    failed_batches += 1
+                    print(f"⚠️ 该批次处理失败，已跳过")
+                else:
+                    # 后处理：修正序号和格式
+                    batch_summary = self._fix_batch_format(batch_summary, i + 1, len(batch))
+                
+                all_summaries.append(batch_summary)
+                all_paper_data.extend(batch_paper_data)
+                
+            except Exception as e:
+                # 额外的保护层，防止未捕获的异常
+                failed_batches += 1
+                print(f"❌ 批次处理出现未捕获的异常，跳过该批次: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                # 生成错误摘要
+                error_summary = f"""## ⚠️ 批次处理失败（第 {i + 1} 到 {min(i + self.max_papers_per_batch, total_papers)} 篇）
+
+**错误信息**: {str(e)}
+
+**受影响的论文**:
+"""
+                for j, paper in enumerate(batch, start=i + 1):
+                    error_summary += f"- {j}. [{paper.get('title', 'Unknown')}]({paper.get('entry_id', '#')})\n"
+                
+                error_summary += "\n---"
+                all_summaries.append(error_summary)
+                # paper_data_list 保持为空，不添加任何数据
         
         # 合并所有批次，确保批次之间有分隔符
         result = "\n\n".join(all_summaries)
+        
+        if failed_batches > 0:
+            print(f"\n⚠️ 警告：共有 {failed_batches} 个批次处理失败，已跳过")
+            print(f"✅ 成功处理了 {len(all_paper_data)} 篇论文")
         
         return result, all_paper_data
 
@@ -539,6 +590,11 @@ arXiv链接：{paper['entry_id']}
         print("="*60)
         
         try:
+            # 检查是否有数据
+            if not paper_data_list:
+                print("警告：没有论文数据，无法生成趋势分析")
+                return "## 📊 今日趋势速览 (Trend Analysis)\n\n⚠️ 由于没有成功处理的论文，无法生成趋势分析报告。"
+            
             # 1. 提取所有论文的 summary 字段用于 embedding
             summaries = [paper_data.get('summary', '') for paper_data in paper_data_list]
             
@@ -643,6 +699,10 @@ arXiv链接：{paper['entry_id']}
         """
         print("使用降级策略生成趋势报告（不使用聚类）")
         
+        # 检查是否有数据
+        if not paper_data_list:
+            return "## 📊 今日趋势速览 (Trend Analysis)\n\n⚠️ 由于没有成功处理的论文，无法生成趋势分析报告。"
+        
         # 构建所有论文的摘要文本
         all_summaries = []
         for paper in paper_data_list[:15]:  # 最多取前15篇避免 token 超限
@@ -698,17 +758,28 @@ arXiv链接：{paper['entry_id']}
             # 1. 生成所有单篇论文的摘要（返回文本和结构化数据）
             summaries, paper_data_list = self._generate_batch_summary(papers)
             
-            # 2. 基于聚类筛选代表性论文，生成趋势报告
-            trend_analysis = self._generate_trend_analysis(papers, paper_data_list)
-            
-            # 3. 对论文按推荐度和聚类信息排序
-            sorted_paper_data = self._sort_papers_by_priority(paper_data_list)
-            
-            # 4. 重新生成排序后的摘要文本
-            sorted_summaries = self._regenerate_summaries_text(sorted_paper_data)
-            
-            # 5. 组合最终报告
-            markdown_content = self._generate_markdown(papers, sorted_summaries, trend_analysis)
+            # 检查是否有成功处理的论文
+            if not paper_data_list:
+                print("⚠️ 警告：所有批次处理都失败了，无法生成完整的报告")
+                # 即使失败，也生成一个包含错误信息的报告
+                trend_analysis = "## ⚠️ 趋势分析\n\n由于所有批次处理失败，无法生成趋势分析报告。"
+                markdown_content = self._generate_markdown(papers, summaries, trend_analysis)
+            else:
+                # 2. 基于聚类筛选代表性论文，生成趋势报告
+                try:
+                    trend_analysis = self._generate_trend_analysis(papers, paper_data_list)
+                except Exception as e:
+                    print(f"⚠️ 趋势分析失败，使用降级策略: {e}")
+                    trend_analysis = self._generate_trend_analysis_fallback(papers, paper_data_list)
+                
+                # 3. 对论文按推荐度和聚类信息排序
+                sorted_paper_data = self._sort_papers_by_priority(paper_data_list)
+                
+                # 4. 重新生成排序后的摘要文本
+                sorted_summaries = self._regenerate_summaries_text(sorted_paper_data)
+                
+                # 5. 组合最终报告（使用排序后的摘要）
+                markdown_content = self._generate_markdown(papers, sorted_summaries, trend_analysis)
             
             # 保存文件
             output_md = str(Path(output_file).with_suffix('.md'))
@@ -735,6 +806,11 @@ arXiv链接：{paper['entry_id']}
         """
         print("\n正在按推荐度和聚类信息对论文排序...")
         
+        # 如果列表为空，直接返回
+        if not paper_data_list:
+            print("⚠️ 没有论文数据需要排序")
+            return []
+        
         # 定义推荐决策的优先级
         decision_priority = {
             '推荐': 0,
@@ -758,15 +834,16 @@ arXiv链接：{paper['entry_id']}
         
         # 打印排序结果统计
         print(f"排序完成：")
-        for i, paper in enumerate(sorted_papers[:5], 1):
-            decision = paper.get('decision', '未评估')
-            cluster_id = paper.get('_cluster_id', 'N/A')
-            cluster_size = paper.get('_cluster_size', 'N/A')
-            title = paper.get('title', 'Unknown')[:50]
-            print(f"  {i}. [{decision}] 聚类{cluster_id}({cluster_size}篇) - {title}...")
-        
-        if len(sorted_papers) > 5:
-            print(f"  ... 还有 {len(sorted_papers) - 5} 篇论文")
+        if sorted_papers:
+            for i, paper in enumerate(sorted_papers[:5], 1):
+                decision = paper.get('decision', '未评估')
+                cluster_id = paper.get('_cluster_id', 'N/A')
+                cluster_size = paper.get('_cluster_size', 'N/A')
+                title = paper.get('title', 'Unknown')[:50]
+                print(f"  {i}. [{decision}] 聚类{cluster_id}({cluster_size}篇) - {title}...")
+            
+            if len(sorted_papers) > 5:
+                print(f"  ... 还有 {len(sorted_papers) - 5} 篇论文")
         
         return sorted_papers
 
@@ -775,6 +852,10 @@ arXiv链接：{paper['entry_id']}
         根据排序后的论文数据重新生成摘要文本
         """
         print("正在重新生成排序后的摘要文本...")
+        
+        # 如果列表为空，返回提示信息
+        if not sorted_paper_data:
+            return "## ⚠️ 没有成功处理的论文\n\n所有批次处理都失败了，请查看上方的错误信息。"
         
         formatted_papers = []
         
