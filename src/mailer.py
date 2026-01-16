@@ -32,7 +32,44 @@ class Mailer:
                 md_text = f.read()
 
             html_body = markdown.markdown(md_text, extensions=['extra'])
-            styled_html = f"<html><body style='font-family: Arial, sans-serif;'>{html_body}</body></html>"
+            
+            # 后处理：确保列表项在邮件中正确换行显示
+            # 修复连续列表项在邮件中显示时连在一起的问题
+            import re
+            # 在每个 </li> 后面添加 <br> 标签，确保换行（邮件客户端兼容性更好）
+            html_body = re.sub(r'</li>', r'</li><br>', html_body)
+            # 移除列表结束标签前的多余 <br>
+            html_body = re.sub(r'<br>\s*</ul>', r'</ul>', html_body)
+            html_body = re.sub(r'<br>\s*</ol>', r'</ol>', html_body)
+            
+            # 添加CSS样式确保列表项正确换行显示
+            styled_html = f"""<html>
+<head>
+<style>
+    body {{
+        font-family: Arial, sans-serif;
+        line-height: 1.6;
+    }}
+    ul, ol {{
+        margin: 10px 0;
+        padding-left: 30px;
+    }}
+    li {{
+        margin: 8px 0;
+        display: list-item;
+        list-style-position: outside;
+        line-height: 1.8;
+    }}
+    ul li, ol li {{
+        margin-bottom: 10px;
+    }}
+    p {{
+        margin: 10px 0;
+    }}
+</style>
+</head>
+<body>{html_body}</body>
+</html>"""
             
             # 解析收件人列表
             receivers = [r.strip() for r in self.receiver_email.split(',')]

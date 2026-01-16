@@ -362,10 +362,13 @@ arXiv链接：{paper['entry_id']}
             for i, (paper, paper_data) in enumerate(zip(papers, paper_data_list)):
                 paper_num = start_index + i
                 
-                # 获取决策信息（不添加图标）
+                # 获取决策信息
                 decision = paper_data.get('decision', '未评估')
                 
-                formatted_paper = f"""## {paper_num}. {paper['title']}
+                # 如果是推荐论文，在标题前添加⭐图标
+                title_prefix = "⭐ " if decision == '推荐' else ""
+                
+                formatted_paper = f"""## {paper_num}. {title_prefix}{paper['title']}
 - **中文标题**: {paper_data.get('chinese_title', '')}
 - **Link**: {paper['entry_id']}
 - **推荐决策:** {decision}
@@ -402,7 +405,9 @@ arXiv链接：{paper['entry_id']}
                     for i, (paper, paper_data) in enumerate(zip(papers, paper_data_list)):
                         paper_num = start_index + i
                         decision = paper_data.get('decision', '未评估')
-                        formatted_paper = f"""## {paper_num}. {paper['title']}
+                        # 如果是推荐论文，在标题前添加⭐图标
+                        title_prefix = "⭐ " if decision == '推荐' else ""
+                        formatted_paper = f"""## {paper_num}. {title_prefix}{paper['title']}
 - **中文标题**: {paper_data.get('chinese_title', '')}
 - **Link**: {paper['entry_id']}
 - **推荐决策:** {decision}
@@ -628,6 +633,10 @@ arXiv链接：{paper['entry_id']}
             else:
                 labels = cluster_papers(embeddings)
             
+            # 计算实际的聚类数量（排除噪声点-1）
+            actual_cluster_count = len(set(labels)) - (1 if -1 in labels else 0)
+            print(f"实际聚类数量: {actual_cluster_count}")
+            
             # 4. 选择代表性论文
             representative_papers = select_representative_papers(paper_data_list, embeddings, labels)
             
@@ -655,25 +664,32 @@ arXiv链接：{paper['entry_id']}
             analysis_prompt = f"""
 你是一名科技情报分析师。以下是今日 Arxiv 更新的大模型(LLM)领域论文中，通过聚类算法筛选出的 {len(representative_papers)} 篇代表性论文的详细摘要。
 
-这些论文已经过智能聚类，代表了今日论文的主要研究方向。请基于这些摘要内容，生成一份趋势简报。
+这些论文已经过智能聚类，共分为 **{actual_cluster_count} 个研究热点**。请基于这些摘要内容，生成一份趋势简报。
 
-要求：
-1. 根据摘要中的"关键词"、"核心痛点"、"技术创新"等信息，将论文归纳为 2-4 个核心研究热点（如：RAG优化、多模态、推理加速、安全对齐等）。
-2. 每个热点下，写一句简短的"赛道观察"（说明该方向今天的技术突破点或关注点）。
-3. 列出属于该热点的最具代表性的论文标题（只列标题）。
+**重要要求：**
+1. 必须生成 **恰好 {actual_cluster_count} 个**核心研究热点，不能多也不能少。
+2. 根据摘要中的"关键词"、"核心痛点"、"技术创新"等信息，将论文归纳为这 {actual_cluster_count} 个研究热点（如：RAG优化、多模态、推理加速、安全对齐等）。
+3. 每个热点下，写一句简短的"赛道观察"（说明该方向今天的技术突破点或关注点）。
+4. 列出属于该热点的最具代表性的论文标题（只列标题）。
 
 请严格遵循以下 Markdown 格式输出：
 
 ## 📊 今日趋势速览 (Trend Analysis)
 
-### 🔥 [热点方向名称，例如：RAG 检索增强]
+### 🔥 [热点方向名称1]
 > **赛道观察：** (一句话概括该方向今天的技术突破点或关注点)
 - (论文标题1)
 - (论文标题2)
 
-### 🤖 [热点方向名称2]
+### 🔥 [热点方向名称2]
 > **赛道观察：** ...
 - ...
+
+### 🔥 [热点方向名称3]
+> **赛道观察：** ...
+- ...
+
+（继续直到生成 {actual_cluster_count} 个热点）
 
 ---
 
@@ -895,21 +911,29 @@ arXiv链接：{paper['entry_id']}
         
         import re
         
+        # 扩展emoji匹配，包括更多可能的emoji（确保能匹配到所有热点）
         # 匹配所有热点方向的标题行（### 后跟emoji和文本）
         # 例如: ### 🔥 [热点方向名称] 或 ### 🤖 [热点方向名称]
-        pattern = r'(###\s*)([🔥🤖🧠🚀🌐⚖️📊]+)(\s+)'
+        pattern = r'(###\s*)([🔥🤖🧠🚀🌐⚖️📊🛠️💡🎯⚡🌟⭐]+)(\s+)'
         
         lines = trend_analysis.split('\n')
         icon_index = 0
         
         for i, line in enumerate(lines):
             match = re.search(pattern, line)
-            if match and icon_index < len(colors):
-                color = colors[icon_index]
-                # 统一替换为火焰图标，并使用对应颜色
-                replacement = f"{match.group(1)}<span style='color: {color};'>🔥</span>{match.group(3)}"
-                lines[i] = re.sub(pattern, replacement, line)
-                icon_index += 1
+            if match:
+                if icon_index < len(colors):
+                    # 在聚类数量范围内，分配对应颜色
+                    color = colors[icon_index]
+                    # 统一替换为火焰图标，并使用对应颜色
+                    replacement = f"{match.group(1)}<span style='color: {color};'>🔥</span>{match.group(3)}"
+                    lines[i] = re.sub(pattern, replacement, line)
+                    icon_index += 1
+                else:
+                    # 如果超出聚类数量（理论上不应该发生），使用默认火焰图标
+                    replacement = f"{match.group(1)}🔥{match.group(3)}"
+                    lines[i] = re.sub(pattern, replacement, line)
+                    print(f"⚠️ 警告：检测到超出聚类数量的热点方向（第 {icon_index + 1} 个），已使用默认图标")
         
         return '\n'.join(lines)
     
@@ -980,7 +1004,10 @@ arXiv链接：{paper['entry_id']}
         for i, paper_data in enumerate(sorted_paper_data, 1):
             decision = paper_data.get('decision', '未评估')
             
-            formatted_paper = f"""## {i}. {paper_data.get('title', 'Unknown')}
+            # 如果是推荐论文，在标题前添加⭐图标
+            title_prefix = "⭐ " if decision == '推荐' else ""
+            
+            formatted_paper = f"""## {i}. {title_prefix}{paper_data.get('title', 'Unknown')}
 - **中文标题**: {paper_data.get('chinese_title', '')}
 - **Link**: {paper_data.get('entry_id', '')}
 - **推荐决策:** {decision}
