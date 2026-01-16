@@ -10,8 +10,10 @@ import requests
 import time
 from datetime import datetime
 import pytz
+import numpy as np
 from config.settings import LLM_CONFIG
 from src.clustering import get_embeddings, cluster_papers, select_representative_papers
+from src.visualizer import generate_decision_pie_chart, generate_trend_pie_chart, generate_keywords_pie_chart
 
 class ModelClient:
     """兼容 OpenAI 接口格式的 API 客户端 (适配 DashScope/DeepSeek)"""
@@ -577,13 +579,16 @@ arXiv链接：{paper['entry_id']}
         
         return result, all_paper_data
 
-    def _generate_trend_analysis(self, papers: List[Dict[str, Any]], paper_data_list: List[Dict[str, Any]]) -> str:
+    def _generate_trend_analysis(self, papers: List[Dict[str, Any]], paper_data_list: List[Dict[str, Any]]) -> tuple:
         """
         使用 embedding 聚类筛选代表性论文，然后生成趋势报告
         
         Args:
             papers: 原始论文列表
             paper_data_list: 包含 LLM 生成的 summary 等字段的结构化数据
+            
+        Returns:
+            tuple: (trend_analysis_text, labels, embeddings) - 趋势分析文本、聚类标签、embeddings
         """
         print("\n" + "="*60)
         print("开始基于 Embedding 聚类的趋势分析")
@@ -593,14 +598,14 @@ arXiv链接：{paper['entry_id']}
             # 检查是否有数据
             if not paper_data_list:
                 print("警告：没有论文数据，无法生成趋势分析")
-                return "## 📊 今日趋势速览 (Trend Analysis)\n\n⚠️ 由于没有成功处理的论文，无法生成趋势分析报告。"
+                return ("## 📊 今日趋势速览 (Trend Analysis)\n\n⚠️ 由于没有成功处理的论文，无法生成趋势分析报告。", None, None)
             
             # 1. 提取所有论文的 summary 字段用于 embedding
             summaries = [paper_data.get('summary', '') for paper_data in paper_data_list]
             
             if not summaries or len(summaries) == 0:
                 print("警告：没有找到论文摘要，使用降级策略")
-                return self._generate_trend_analysis_fallback(papers, paper_data_list)
+                return (self._generate_trend_analysis_fallback(papers, paper_data_list), None, None)
             
             print(f"提取了 {len(summaries)} 篇论文的摘要")
             
@@ -609,7 +614,7 @@ arXiv链接：{paper['entry_id']}
             
             if not embeddings or len(embeddings) != len(summaries):
                 print("警告：Embedding 获取失败，使用降级策略")
-                return self._generate_trend_analysis_fallback(papers, paper_data_list)
+                return (self._generate_trend_analysis_fallback(papers, paper_data_list), None, None)
             
             # 3. 进行聚类
             # 根据配置选择聚类方法
@@ -628,7 +633,7 @@ arXiv链接：{paper['entry_id']}
             
             if not representative_papers:
                 print("警告：未能选择代表性论文，使用降级策略")
-                return self._generate_trend_analysis_fallback(papers, paper_data_list)
+                return (self._generate_trend_analysis_fallback(papers, paper_data_list), labels, embeddings)
             
             print(f"\n从 {len(paper_data_list)} 篇论文中筛选出 {len(representative_papers)} 篇代表性论文")
             
@@ -684,14 +689,14 @@ arXiv链接：{paper['entry_id']}
             
             result = response["choices"][0]["message"]["content"].strip()
             print("趋势报告生成成功！")
-            return result
+            return (result, labels, embeddings)
             
         except Exception as e:
             print(f"聚类趋势分析失败: {e}")
             import traceback
             traceback.print_exc()
             print("使用降级策略...")
-            return self._generate_trend_analysis_fallback(papers, paper_data_list)
+            return (self._generate_trend_analysis_fallback(papers, paper_data_list), None, None)
     
     def _generate_trend_analysis_fallback(self, papers: List[Dict[str, Any]], paper_data_list: List[Dict[str, Any]]) -> str:
         """
@@ -766,8 +771,10 @@ arXiv链接：{paper['entry_id']}
                 markdown_content = self._generate_markdown(papers, summaries, trend_analysis)
             else:
                 # 2. 基于聚类筛选代表性论文，生成趋势报告
+                labels = None
+                embeddings = None
                 try:
-                    trend_analysis = self._generate_trend_analysis(papers, paper_data_list)
+                    trend_analysis, labels, embeddings = self._generate_trend_analysis(papers, paper_data_list)
                 except Exception as e:
                     print(f"⚠️ 趋势分析失败，使用降级策略: {e}")
                     trend_analysis = self._generate_trend_analysis_fallback(papers, paper_data_list)
@@ -778,8 +785,27 @@ arXiv链接：{paper['entry_id']}
                 # 4. 重新生成排序后的摘要文本
                 sorted_summaries = self._regenerate_summaries_text(sorted_paper_data)
                 
-                # 5. 组合最终报告（使用排序后的摘要）
-                markdown_content = self._generate_markdown(papers, sorted_summaries, trend_analysis)
+                # 5. 生成饼图
+                pie_chart_paths = self._generate_pie_charts(
+                    paper_data_list, 
+                    labels, 
+                    output_file
+                )
+                
+                # 6. 替换趋势分析中的火焰图标颜色
+                if 'trend_colors' in pie_chart_paths:
+                    trend_analysis = self._replace_trend_icons_with_colors(
+                        trend_analysis,
+                        pie_chart_paths['trend_colors']
+                    )
+                
+                # 7. 组合最终报告（使用排序后的摘要）
+                markdown_content = self._generate_markdown(
+                    papers, 
+                    sorted_summaries, 
+                    trend_analysis,
+                    pie_chart_paths
+                )
             
             # 保存文件
             output_md = str(Path(output_file).with_suffix('.md'))
@@ -794,7 +820,99 @@ arXiv链接：{paper['entry_id']}
             import traceback
             traceback.print_exc()
             return False
+    
+    def _generate_pie_charts(
+        self,
+        paper_data_list: List[Dict[str, Any]],
+        labels: Optional[np.ndarray],
+        output_file: str
+    ) -> Dict[str, Any]:
+        """
+        生成趋势分布饼图（不包括推荐决策分布）
+        
+        Args:
+            paper_data_list: 论文数据列表
+            labels: 聚类标签数组
+            output_file: 输出文件路径（用于确定图片保存位置）
+            
+        Returns:
+            Dict[str, Any]: 包含饼图路径和颜色信息的字典
+        """
+        pie_chart_paths = {}
+        output_path = Path(output_file)
+        base_dir = output_path.parent
+        img_dir = base_dir / "img"
+        img_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 生成文件名前缀（基于输出文件名）
+        file_prefix = output_path.stem  # 例如: summary_20260115_113230
+        
+        try:
+            # 1. 生成研究热点分布饼图（如果有聚类标签）
+            if labels is not None and len(labels) > 0:
+                trend_chart_path = img_dir / f"{file_prefix}_trend_pie.png"
+                trend_result = generate_trend_pie_chart(
+                    paper_data_list,
+                    labels,
+                    str(trend_chart_path),
+                    title="研究热点分布"
+                )
+                if trend_result and trend_result[0]:
+                    pie_chart_paths['trend'] = f"img/{trend_chart_path.name}"
+                    pie_chart_paths['trend_colors'] = trend_result[1]  # 保存颜色列表
+        except Exception as e:
+            print(f"⚠️ 生成研究热点饼图失败: {e}")
+        
+        try:
+            # 2. 生成关键词分布饼图
+            keywords_chart_path = img_dir / f"{file_prefix}_keywords_pie.png"
+            keywords_path = generate_keywords_pie_chart(
+                paper_data_list,
+                str(keywords_chart_path),
+                top_n=8,
+                title="关键词分布（Top 8）"
+            )
+            if keywords_path:
+                pie_chart_paths['keywords'] = f"img/{keywords_chart_path.name}"
+        except Exception as e:
+            print(f"⚠️ 生成关键词饼图失败: {e}")
+        
+        return pie_chart_paths
 
+    def _replace_trend_icons_with_colors(self, trend_analysis: str, colors: List[str]) -> str:
+        """
+        将所有热点方向的图标统一替换为火焰图标，并使用饼图中的对应颜色
+        
+        Args:
+            trend_analysis: 趋势分析文本
+            colors: 颜色列表（十六进制格式），按聚类大小排序
+            
+        Returns:
+            替换后的文本
+        """
+        if not colors or not trend_analysis:
+            return trend_analysis
+        
+        import re
+        
+        # 匹配所有热点方向的标题行（### 后跟emoji和文本）
+        # 例如: ### 🔥 [热点方向名称] 或 ### 🤖 [热点方向名称]
+        pattern = r'(###\s*)([🔥🤖🧠🚀🌐⚖️📊]+)(\s+)'
+        
+        lines = trend_analysis.split('\n')
+        icon_index = 0
+        
+        for i, line in enumerate(lines):
+            match = re.search(pattern, line)
+            if match and icon_index < len(colors):
+                color = colors[icon_index]
+                # 统一替换为火焰图标，并使用对应颜色
+                replacement = f"{match.group(1)}<span style='color: {color};'>🔥</span>{match.group(3)}"
+                lines[i] = re.sub(pattern, replacement, line)
+                icon_index += 1
+        
+        return '\n'.join(lines)
+    
     def _sort_papers_by_priority(self, paper_data_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         按推荐度和聚类信息对论文排序
@@ -879,13 +997,66 @@ arXiv链接：{paper['entry_id']}
         
         return "\n\n".join(formatted_papers)
 
-    def _generate_markdown(self, papers: List[Dict[str, Any]], summaries: str, trend_analysis: str = "") -> str:
+    def _generate_markdown(
+        self, 
+        papers: List[Dict[str, Any]], 
+        summaries: str, 
+        trend_analysis: str = "",
+        pie_chart_paths: Dict[str, str] = None
+    ) -> str:
         beijing_time = datetime.now(pytz.timezone('Asia/Shanghai')).strftime('%Y-%m-%d %H:%M:%S')
         
         # 统计推荐决策分布
         recommend_count = summaries.count('**推荐决策:** 推荐')
         maybe_count = summaries.count('**推荐决策:** 边缘可看')
         not_recommend_count = summaries.count('**推荐决策:** 不推荐')
+        
+        # 构建并排的饼图部分
+        pie_charts_section = ""
+        if pie_chart_paths:
+            # 使用HTML div实现并排显示
+            pie_charts_section = "\n\n<div style='display: flex; justify-content: space-around; align-items: flex-start; flex-wrap: wrap; gap: 20px; margin: 20px 0;'>\n\n"
+            
+            # 研究热点分布饼图
+            if pie_chart_paths.get('trend'):
+                pie_charts_section += f"<div style='flex: 1; min-width: 300px; text-align: center;'>\n"
+                pie_charts_section += f"<h4 style='margin-bottom: 10px;'>研究热点分布</h4>\n"
+                pie_charts_section += f"<img src='{pie_chart_paths['trend']}' alt='研究热点分布' style='max-width: 100%; height: auto;' />\n"
+                pie_charts_section += f"</div>\n\n"
+            
+            # 关键词分布饼图
+            if pie_chart_paths.get('keywords'):
+                pie_charts_section += f"<div style='flex: 1; min-width: 300px; text-align: center;'>\n"
+                pie_charts_section += f"<h4 style='margin-bottom: 10px;'>关键词分布（Top 8）</h4>\n"
+                pie_charts_section += f"<img src='{pie_chart_paths['keywords']}' alt='关键词分布' style='max-width: 100%; height: auto;' />\n"
+                pie_charts_section += f"</div>\n\n"
+            
+            pie_charts_section += "</div>\n\n"
+        
+        # 将饼图插入到趋势分析标题之后、热点方向之前
+        # trend_analysis 格式通常是: "## 📊 今日趋势速览 (Trend Analysis)\n\n### 🔥 ..."
+        if trend_analysis and pie_charts_section:
+            lines = trend_analysis.split('\n')
+            title_line_index = -1
+            
+            # 找到标题行
+            for i, line in enumerate(lines):
+                if line.strip().startswith('## 📊') or '今日趋势速览' in line:
+                    title_line_index = i
+                    break
+            
+            if title_line_index >= 0:
+                # 找到标题后的第一个空行或内容开始位置
+                insert_index = title_line_index + 1
+                # 跳过标题后的空行
+                while insert_index < len(lines) and lines[insert_index].strip() == '':
+                    insert_index += 1
+                
+                # 在标题后、内容前插入饼图
+                trend_analysis = '\n'.join(lines[:insert_index]) + pie_charts_section + '\n'.join(lines[insert_index:])
+            else:
+                # 如果没找到标题，在开头插入
+                trend_analysis = pie_charts_section + trend_analysis
         
         return f"""# Arxiv LLM 每日研报
 

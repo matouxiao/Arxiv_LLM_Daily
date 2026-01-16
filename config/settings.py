@@ -31,7 +31,7 @@ SEARCH_CONFIG = {
     'author_only': False,
     'abstract_only': False,
     'search_mode': 'all',
-    'days_back': 2,                   # 只查询最近N天的论文
+    'days_back': 3,                   # 只查询最近N天的论文
 }
 
 

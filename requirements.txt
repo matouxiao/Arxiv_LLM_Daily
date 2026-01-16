@@ -9,3 +9,4 @@ openai
 PyMuPDF>=1.23.0  # 用于 PDF 文本提取
 scikit-learn>=1.0.0  # 用于聚类分析
 numpy>=1.21.0  # 用于数值计算
+matplotlib>=3.5.0  # 用于生成饼图等可视化图表
