@@ -25,13 +25,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Install package
-        run: pip install -e .
-
       - name: Install Chinese Fonts
         run: |
           sudo apt-get update
           sudo apt-get install -y fonts-wqy-zenhei  # 安装文泉驿正黑字体
+
+      - name: Install package
+        run: pip install -e .
 
       - name: Make Configuration
         # 创建配置文件，与本地 config/settings.py 保持一致

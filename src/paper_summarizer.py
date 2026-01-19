@@ -747,16 +747,16 @@ arXiv链接：{paper['entry_id']}
 
 ## 📊 今日趋势速览 (Trend Analysis)
 
-### 🔥 [热点方向名称1]（对应最大聚类，{get_cluster_size_example(0)} 篇论文）
+### 🔥 [热点方向名称1]（{get_cluster_size_example(0)} 篇论文）
 > **赛道观察：** (一句话概括该方向今天的技术突破点或关注点)
 - (论文标题1)
 - (论文标题2)
 
-### 🔥 [热点方向名称2]（对应第二大聚类，{get_cluster_size_example(1)} 篇论文）
+### 🔥 [热点方向名称2]（{get_cluster_size_example(1)} 篇论文）
 > **赛道观察：** ...
 - ...
 
-### 🔥 [热点方向名称3]（对应第三大聚类，{get_cluster_size_example(2)} 篇论文）
+### 🔥 [热点方向名称3]（{get_cluster_size_example(2)} 篇论文）
 > **赛道观察：** ...
 - ...
 
