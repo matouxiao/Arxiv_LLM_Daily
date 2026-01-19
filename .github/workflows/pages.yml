@@ -63,7 +63,7 @@ jobs:
           # arXiv API 搜索配置
           SEARCH_CONFIG = {
               'categories': CATEGORIES, 
-              'max_total_results': 10,          # 每次获取的最大论文数量，建议控制在50以内以节省Token
+              'max_total_results': 68,          # 每次获取的最大论文数量，建议控制在50以内以节省Token
               'sort_by': 'SubmittedDate',       # 按提交时间排序
               'sort_order': 'Ascending',        # 最老在前（从旧到新）
               'include_cross_listed': True,
@@ -77,7 +77,7 @@ jobs:
           }
           
           # 搜索查询配置 (核心筛选逻辑)
-          QUERY = '("Large Language Model" OR "LLM" OR "Generative AI" OR "Transformer" OR "RAG" OR "Chain of Thought")'
+          QUERY = '("Large Language Model" OR "LLM" OR "Generative AI" OR "Transformer" OR "RAG" OR "Chain of Thought" OR "RL" OR "Agent" OR "Multimodal" OR "Audio Recognition Understanding Generation")'
           
           # 语言模型API配置 (DashScope / DeepSeek)
           LLM_CONFIG = {
