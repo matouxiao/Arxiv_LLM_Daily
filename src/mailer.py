@@ -108,7 +108,7 @@ class Mailer:
                         
                         # 将列表项文本转换为多个 <li> 标签
                         list_items = re.findall(r'-\s+([^\n]+)', list_items_text)
-                        # 确保每个列表项之间有换行
+                        # 确保每个列表项之间有换行，但不要有额外的空白
                         list_items_html = '<br>'.join([f'<li>{item.strip()}</li>' for item in list_items])
                         
                         return f'<blockquote><p>{text_part}</p></blockquote><br><ul class="blockquote-list">{list_items_html}</ul>'
@@ -161,18 +161,19 @@ class Mailer:
             html_body = re.sub(r'<li>\s*<p>', r'<li>', html_body)
             html_body = re.sub(r'</p>\s*</li>', r'</li>', html_body)
             
-            # 4. 先处理"赛道观察"部分的列表项（在blockquote后面），确保它们之间有换行
+            # 4. 先处理"赛道观察"部分的列表项（在blockquote后面），确保它们之间有换行但不要空行
             # 对于blockquote后面的ul列表，确保每个列表项之间有<br>换行
             def process_blockquote_list(match):
                 ul_content = match.group(1)
-                # 确保列表项之间有<br>换行（论文标题之间需要换行）
-                # 先处理列表项之间没有分隔的情况
-                ul_content = re.sub(r'</li>\s*<li>', r'</li><br><li>', ul_content)
-                # 如果列表项后面没有<br>，添加一个（确保每个列表项后都有换行）
-                ul_content = re.sub(r'</li>(?!\s*<br>)', r'</li><br>', ul_content)
-                # 确保列表项内容中没有多余的空白
+                # 清理列表项内容中的多余空白
                 ul_content = re.sub(r'<li>\s+', r'<li>', ul_content)
                 ul_content = re.sub(r'\s+</li>', r'</li>', ul_content)
+                # 如果列表项之间没有<br>，添加一个（确保每个列表项后都有换行）
+                ul_content = re.sub(r'</li>(?!\s*<br>)\s*<li>', r'</li><br><li>', ul_content)
+                # 确保列表项之间只有一个<br>，移除多余的<br>和空白
+                ul_content = re.sub(r'</li>\s*<br>\s*<br>\s*<li>', r'</li><br><li>', ul_content)
+                ul_content = re.sub(r'</li>\s+<br>\s+<li>', r'</li><br><li>', ul_content)
+                
                 # 添加特殊标记，表示这个ul已经被处理过了
                 return f'</blockquote><br><ul data-processed="blockquote" class="blockquote-list">{ul_content}</ul>'
             
@@ -204,44 +205,6 @@ class Mailer:
             
             # 清理临时标记（但保留class属性，用于CSS样式）
             html_body = re.sub(r' data-processed="blockquote"', '', html_body)
-            
-            # 5. 修复"赛道观察"部分：确保引用块（blockquote）和列表项之间有换行
-            # 处理 </blockquote> 后直接跟着 <ul> 或 <li> 的情况
-            html_body = re.sub(r'</blockquote>\s*<ul>', r'</blockquote><br><ul>', html_body)
-            html_body = re.sub(r'</blockquote>\s*<li>', r'</blockquote><br><ul><li>', html_body)
-            # 处理 </blockquote> 后跟着 <p> 然后才是列表的情况（这种情况markdown库可能将列表项转换为段落）
-            html_body = re.sub(r'</blockquote>\s*<p>(-[^<]+)</p>', r'</blockquote><br><ul><li>\1</li></ul>', html_body)
-            # 处理引用块内的文本和列表项连在一起的情况
-            # 如果引用块结束后直接跟着非空白字符（可能是列表项文本），添加换行
-            html_body = re.sub(r'</blockquote>\s*([^\s<])', r'</blockquote><br>\1', html_body)
-            
-            # 6. 特别处理：如果引用块内的文本后面直接跟着列表项（在同一段落内，被markdown库错误处理）
-            # 查找引用块内包含列表项的情况（文本和列表项连在一起）
-            def fix_blockquote_with_list(match):
-                full_match = match.group(0)
-                blockquote_content = match.group(1)
-                
-                # 检查引用块内容中是否包含列表项模式（- 开头的文本）
-                # 如果引用块内容以文本结尾，然后跟着列表项（不在引用块内）
-                # 这种情况markdown库可能将列表项也放在引用块内
-                
-                # 尝试分离：查找引用块内是否有列表项模式
-                # 如果引用块内容包含 " - " 或 "\n- " 模式，可能需要分离
-                if re.search(r'[^\n]\s+-\s+[A-Z]', blockquote_content):
-                    # 分离文本和列表项
-                    # 查找最后一个 " - " 或 "\n- " 作为分隔点
-                    parts = re.split(r'([^\n])\s+(-\s+[A-Z][^\n]*)', blockquote_content, 1)
-                    if len(parts) >= 3:
-                        text_part = parts[0] + parts[1]  # 文本部分
-                        list_item = parts[2]  # 列表项（包含 "- " 前缀）
-                        # 移除列表项的 "- " 前缀
-                        list_item_clean = re.sub(r'^-\s+', '', list_item)
-                        return f'<blockquote>{text_part}</blockquote><br><ul><li>{list_item_clean}</li></ul>'
-                
-                return full_match
-            
-            # 匹配引用块，检查是否需要分离列表项
-            html_body = re.sub(r'<blockquote>(.*?)</blockquote>', fix_blockquote_with_list, html_body, flags=re.DOTALL)
             
             # 添加CSS样式确保列表项正确换行显示
             styled_html = f"""<html>
@@ -275,17 +238,35 @@ class Mailer:
         margin-bottom: 0;
         margin-top: 0;
     }}
-    /* 但是"赛道观察"部分的列表项（论文标题）之间需要换行和间距 */
+    /* "赛道观察"部分的列表项（论文标题）之间需要换行，但不要空行 */
+    ul.blockquote-list {{
+        margin: 0 !important;
+        padding: 0 !important;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }}
     ul.blockquote-list li {{
         display: block !important;
-        margin-bottom: 4px !important;
+        margin: 0 !important;
+        padding: 0 !important;
         margin-top: 0 !important;
-        line-height: 1.5 !important;
+        margin-bottom: 0 !important;
+        line-height: 1.4 !important;
+        padding-left: 20px !important;
     }}
-    blockquote + ul li, blockquote + ul li + li {{
+    ul.blockquote-list br {{
+        line-height: 1.4 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        height: 0 !important;
+        font-size: 0 !important;
         display: block !important;
-        margin-top: 4px !important;
-        margin-bottom: 4px !important;
+        content: "" !important;
+    }}
+    blockquote + ul.blockquote-list li, blockquote + ul.blockquote-list li + li {{
+        display: block !important;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
     }}
     p {{
         margin: 0 !important;
