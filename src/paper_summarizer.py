@@ -872,11 +872,12 @@ arXiv链接：{paper['entry_id']}
                 # 4. 重新生成排序后的摘要文本
                 sorted_summaries = self._regenerate_summaries_text(sorted_paper_data)
                 
-                # 5. 生成饼图
+                # 5. 生成饼图（需要trend_analysis来提取热点标题）
                 pie_chart_paths = self._generate_pie_charts(
                     paper_data_list, 
                     labels, 
-                    output_file
+                    output_file,
+                    trend_analysis=trend_analysis
                 )
                 
                 # 6. 替换趋势分析中的火焰图标颜色
@@ -908,11 +909,51 @@ arXiv链接：{paper['entry_id']}
             traceback.print_exc()
             return False
     
+    def _extract_trend_titles(self, trend_analysis: str) -> List[str]:
+        """
+        从趋势分析文本中提取热点标题
+        
+        Args:
+            trend_analysis: 趋势分析文本
+            
+        Returns:
+            热点标题列表，按顺序排列
+        """
+        import re
+        titles = []
+        
+        # 匹配格式：### <span ...> 标题名称（对应...）
+        # 或者：### 🔥 标题名称
+        # 提取标题名称（在HTML标签和emoji之后，在"（对应"之前）
+        # 使用更精确的模式：匹配 ### 后面的内容，直到遇到"（对应"或行尾
+        lines = trend_analysis.split('\n')
+        
+        for line in lines:
+            # 匹配 ### 开头的行
+            if line.strip().startswith('###'):
+                # 移除 ### 和可能的HTML标签
+                content = re.sub(r'^###\s*', '', line)
+                # 移除HTML span标签
+                content = re.sub(r'<span[^>]*>.*?</span>', '', content)
+                # 移除emoji
+                content = re.sub(r'[🔥🤖🧠🚀🌐⚖️📊🛠️💡🎯⚡🌟⭐]+', '', content)
+                # 提取标题（在"（对应"之前的部分）
+                match = re.search(r'^([^（]+)', content)
+                if match:
+                    title = match.group(1).strip()
+                    # 移除多余空白
+                    title = re.sub(r'\s+', ' ', title).strip()
+                    if title:
+                        titles.append(title)
+        
+        return titles
+    
     def _generate_pie_charts(
         self,
         paper_data_list: List[Dict[str, Any]],
         labels: Optional[np.ndarray],
-        output_file: str
+        output_file: str,
+        trend_analysis: str = ""
     ) -> Dict[str, Any]:
         """
         生成趋势分布饼图（不包括推荐决策分布）
@@ -921,6 +962,7 @@ arXiv链接：{paper['entry_id']}
             paper_data_list: 论文数据列表
             labels: 聚类标签数组
             output_file: 输出文件路径（用于确定图片保存位置）
+            trend_analysis: 趋势分析文本（用于提取热点标题）
             
         Returns:
             Dict[str, Any]: 包含饼图路径和颜色信息的字典
@@ -938,11 +980,20 @@ arXiv链接：{paper['entry_id']}
             # 1. 生成研究热点分布饼图（如果有聚类标签）
             if labels is not None and len(labels) > 0:
                 trend_chart_path = img_dir / f"{file_prefix}_trend_pie.png"
+                
+                # 提取热点标题
+                trend_titles = None
+                if trend_analysis:
+                    trend_titles = self._extract_trend_titles(trend_analysis)
+                    if trend_titles:
+                        print(f"提取到 {len(trend_titles)} 个热点标题: {trend_titles}")
+                
                 trend_result = generate_trend_pie_chart(
                     paper_data_list,
                     labels,
                     str(trend_chart_path),
-                    title="研究热点分布"
+                    title="研究热点分布",
+                    trend_titles=trend_titles
                 )
                 if trend_result and trend_result[0]:
                     pie_chart_paths['trend'] = f"img/{trend_chart_path.name}"

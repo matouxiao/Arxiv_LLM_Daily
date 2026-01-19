@@ -74,6 +74,15 @@ def generate_decision_pie_chart(
         textprops={'fontsize': 12, 'weight': 'bold'}
     )
     
+    # 设置百分比字体大小（在绘制后单独设置）
+    for autotext in autotexts:
+        autotext.set_fontsize(18)
+        autotext.set_weight('bold')
+        # 设置百分比字体大小（在绘制后单独设置）
+    for autotext in autotexts:
+        autotext.set_fontsize(14)  # 可以调整这个数值，比如14、16、18等
+        autotext.set_weight('bold')
+    
     # 设置标题
     ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
     
@@ -96,7 +105,8 @@ def generate_trend_pie_chart(
     paper_data_list: List[Dict[str, Any]],
     labels: np.ndarray,
     output_path: str,
-    title: str = "研究热点分布"
+    title: str = "研究热点分布",
+    trend_titles: Optional[List[str]] = None
 ) -> tuple:
     """
     基于聚类结果生成研究热点分布的饼图
@@ -106,6 +116,7 @@ def generate_trend_pie_chart(
         labels: 聚类标签数组
         output_path: 输出图片路径
         title: 图表标题
+        trend_titles: 热点标题列表（可选），如果提供则替换默认的"热点 1"、"热点 2"等
         
     Returns:
         tuple: (图片文件路径, 颜色列表(十六进制))，如果失败返回(None, None)
@@ -130,7 +141,11 @@ def generate_trend_pie_chart(
     sorted_clusters = sorted(cluster_counts.items(), key=lambda x: x[1], reverse=True)
     
     # 准备数据
-    cluster_labels = [f"热点 {i+1}" for i, (label, count) in enumerate(sorted_clusters)]
+    # 如果提供了热点标题列表，使用它们；否则使用默认的"热点 1"、"热点 2"等
+    if trend_titles and len(trend_titles) == len(sorted_clusters):
+        cluster_labels = trend_titles
+    else:
+        cluster_labels = [f"热点 {i+1}" for i, (label, count) in enumerate(sorted_clusters)]
     sizes = [count for _, count in sorted_clusters]
     
     # 使用渐变色
@@ -156,6 +171,11 @@ def generate_trend_pie_chart(
         startangle=90,
         textprops={'fontsize': 11, 'weight': 'bold'}
     )
+
+        # 设置百分比字体大小（在绘制后单独设置）
+    for autotext in autotexts:
+        autotext.set_fontsize(14)  # 可以调整这个数值，比如14、16、18等
+        autotext.set_weight('bold')
     
     # 设置标题
     ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
@@ -221,7 +241,7 @@ def generate_keywords_pie_chart(
     colors = plt.cm.Pastel1(np.linspace(0, 1, len(labels)))
     
     # 创建图表
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = plt.subplots(figsize=(8, 8))
     
     # 绘制饼图
     wedges, texts, autotexts = ax.pie(
@@ -233,7 +253,17 @@ def generate_keywords_pie_chart(
         textprops={'fontsize': 10}
     )
     
-    # 设置标题
+    # 设置百分比字体大小（在绘制后单独设置）
+    for autotext in autotexts:
+        autotext.set_fontsize(14)
+        autotext.set_weight('bold')
+    
+        # 设置百分比字体大小（在绘制后单独设置）
+    for autotext in autotexts:
+        autotext.set_fontsize(14)  # 可以调整这个数值，比如14、16、18等
+        autotext.set_weight('bold')
+        
+        # 设置标题
     ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
     
     # 添加总数说明
