@@ -21,7 +21,7 @@ CATEGORIES = [
 # arXiv API 搜索配置
 SEARCH_CONFIG = {
     'categories': CATEGORIES, 
-    'max_total_results': 20,          # 每次获取的最大论文数量，建议控制在50以内以节省Token
+    'max_total_results': 10,          # 每次获取的最大论文数量，建议控制在50以内以节省Token
     'sort_by': 'SubmittedDate',       # 按提交时间排序
     'sort_order': 'Ascending',        # 最老在前（从旧到新）
     'include_cross_listed': True,

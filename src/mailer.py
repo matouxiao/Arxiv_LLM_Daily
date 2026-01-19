@@ -108,9 +108,10 @@ class Mailer:
                         
                         # 将列表项文本转换为多个 <li> 标签
                         list_items = re.findall(r'-\s+([^\n]+)', list_items_text)
-                        list_items_html = ''.join([f'<li>{item.strip()}</li><br>' for item in list_items])
+                        # 确保每个列表项之间有换行
+                        list_items_html = '<br>'.join([f'<li>{item.strip()}</li>' for item in list_items])
                         
-                        return f'<blockquote><p>{text_part}</p></blockquote><br><ul>{list_items_html}</ul>'
+                        return f'<blockquote><p>{text_part}</p></blockquote><br><ul class="blockquote-list">{list_items_html}</ul>'
                 
                 return blockquote_full
             
@@ -165,11 +166,15 @@ class Mailer:
             def process_blockquote_list(match):
                 ul_content = match.group(1)
                 # 确保列表项之间有<br>换行（论文标题之间需要换行）
+                # 先处理列表项之间没有分隔的情况
                 ul_content = re.sub(r'</li>\s*<li>', r'</li><br><li>', ul_content)
-                # 如果列表项后面没有<br>，添加一个
+                # 如果列表项后面没有<br>，添加一个（确保每个列表项后都有换行）
                 ul_content = re.sub(r'</li>(?!\s*<br>)', r'</li><br>', ul_content)
+                # 确保列表项内容中没有多余的空白
+                ul_content = re.sub(r'<li>\s+', r'<li>', ul_content)
+                ul_content = re.sub(r'\s+</li>', r'</li>', ul_content)
                 # 添加特殊标记，表示这个ul已经被处理过了
-                return f'</blockquote><br><ul data-processed="blockquote">{ul_content}</ul>'
+                return f'</blockquote><br><ul data-processed="blockquote" class="blockquote-list">{ul_content}</ul>'
             
             # 匹配blockquote后面的ul列表（"赛道观察"部分），添加特殊标记以便后续识别
             html_body = re.sub(r'</blockquote>\s*<ul>(.*?)</ul>', process_blockquote_list, html_body, flags=re.DOTALL)
@@ -197,7 +202,7 @@ class Mailer:
             html_body = re.sub(r'<br>\s*</ul>', r'</ul>', html_body)
             html_body = re.sub(r'<br>\s*</ol>', r'</ol>', html_body)
             
-            # 清理临时标记
+            # 清理临时标记（但保留class属性，用于CSS样式）
             html_body = re.sub(r' data-processed="blockquote"', '', html_body)
             
             # 5. 修复"赛道观察"部分：确保引用块（blockquote）和列表项之间有换行
@@ -270,9 +275,17 @@ class Mailer:
         margin-bottom: 0;
         margin-top: 0;
     }}
-    /* 但是"赛道观察"部分的列表项（论文标题）之间需要一些间距 */
+    /* 但是"赛道观察"部分的列表项（论文标题）之间需要换行和间距 */
+    ul.blockquote-list li {{
+        display: block !important;
+        margin-bottom: 4px !important;
+        margin-top: 0 !important;
+        line-height: 1.5 !important;
+    }}
     blockquote + ul li, blockquote + ul li + li {{
-        margin-top: 4px;
+        display: block !important;
+        margin-top: 4px !important;
+        margin-bottom: 4px !important;
     }}
     p {{
         margin: 0 !important;
