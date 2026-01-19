@@ -186,6 +186,7 @@ arXiv链接：{paper['entry_id']}
 - 无实验，或实验仅为 toy task / 人工合成小任务
 - 应用场景与金融、企业级系统几乎无关联，且迁移成本极高
 - 完全聚焦于证明最优性、收敛性、复杂度界限，而非可用系统
+- 和信息安全相关的论文
 
 请阅读以下{len(papers)}篇论文的{content_desc}，为每篇论文提取关键信息。
 
@@ -897,7 +898,7 @@ arXiv链接：{paper['entry_id']}
 
     def _replace_trend_icons_with_colors(self, trend_analysis: str, colors: List[str]) -> str:
         """
-        将所有热点方向的图标统一替换为火焰图标，并使用饼图中的对应颜色
+        将所有热点方向的图标统一替换为圆形图标，并使用饼图中的对应颜色
         
         Args:
             trend_analysis: 趋势分析文本
@@ -925,13 +926,16 @@ arXiv链接：{paper['entry_id']}
                 if icon_index < len(colors):
                     # 在聚类数量范围内，分配对应颜色
                     color = colors[icon_index]
-                    # 统一替换为火焰图标，并使用对应颜色
-                    replacement = f"{match.group(1)}<span style='color: {color};'>🔥</span>{match.group(3)}"
+                    # 统一替换为圆形图标，并使用对应颜色
+                    # 使用HTML/CSS创建圆形图标
+                    circle_icon = f"<span style='display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: {color}; margin-right: 6px; vertical-align: middle;'></span>"
+                    replacement = f"{match.group(1)}{circle_icon}{match.group(3)}"
                     lines[i] = re.sub(pattern, replacement, line)
                     icon_index += 1
                 else:
-                    # 如果超出聚类数量（理论上不应该发生），使用默认火焰图标
-                    replacement = f"{match.group(1)}🔥{match.group(3)}"
+                    # 如果超出聚类数量（理论上不应该发生），使用默认灰色圆形图标
+                    default_circle = "<span style='display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: #999999; margin-right: 6px; vertical-align: middle;'></span>"
+                    replacement = f"{match.group(1)}{default_circle}{match.group(3)}"
                     lines[i] = re.sub(pattern, replacement, line)
                     print(f"⚠️ 警告：检测到超出聚类数量的热点方向（第 {icon_index + 1} 个），已使用默认图标")
         

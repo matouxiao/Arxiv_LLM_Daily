@@ -89,3 +89,13 @@ CLUSTERING_CONFIG = {
     'n_jobs': -1,  # 使用所有CPU核心
     'top_clusters': 5,  # 选择最大的N个聚类
 }
+
+# 邮件配置
+# 优先从环境变量读取，如果没有则使用默认值（本地运行时使用）
+MAIL_CONFIG = {
+    'smtp_server': os.getenv("SMTP_SERVER", "smtp.feishu.cn"),
+    'smtp_port': int(os.getenv("SMTP_PORT", "465")),
+    'sender_email': os.getenv("SENDER_EMAIL", "xiaojingze@comein.cn"),  # 默认使用你的邮箱作为发件人
+    'sender_password': os.getenv("SENDER_PASSWORD", "UX2EXVPT6QubsGg4"),  # 需要设置环境变量或使用应用专用密码
+    'receiver_email': os.getenv("RECEIVER_EMAIL", "xiaojingze@comein.cn"),  # 默认发送到你的邮箱
+}
