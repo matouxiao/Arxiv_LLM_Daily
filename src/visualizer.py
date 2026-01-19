@@ -71,16 +71,12 @@ def generate_decision_pie_chart(
         colors=chart_colors,
         autopct='%1.1f%%',
         startangle=90,
-        textprops={'fontsize': 12, 'weight': 'bold'}
+        textprops={'fontsize': 14, 'weight': 'bold'}
     )
     
     # 设置百分比字体大小（在绘制后单独设置）
     for autotext in autotexts:
         autotext.set_fontsize(18)
-        autotext.set_weight('bold')
-        # 设置百分比字体大小（在绘制后单独设置）
-    for autotext in autotexts:
-        autotext.set_fontsize(14)  # 可以调整这个数值，比如14、16、18等
         autotext.set_weight('bold')
     
     # 设置标题
@@ -169,12 +165,12 @@ def generate_trend_pie_chart(
         colors=colors_rgba,
         autopct='%1.1f%%',
         startangle=90,
-        textprops={'fontsize': 11, 'weight': 'bold'}
+        textprops={'fontsize': 14, 'weight': 'bold'}
     )
 
         # 设置百分比字体大小（在绘制后单独设置）
     for autotext in autotexts:
-        autotext.set_fontsize(14)  # 可以调整这个数值，比如14、16、18等
+        autotext.set_fontsize(18)  # 可以调整这个数值，比如14、16、18等
         autotext.set_weight('bold')
     
     # 设置标题
@@ -250,17 +246,12 @@ def generate_keywords_pie_chart(
         colors=colors,
         autopct='%1.1f%%',
         startangle=90,
-        textprops={'fontsize': 10}
+        textprops={'fontsize': 14}
     )
     
     # 设置百分比字体大小（在绘制后单独设置）
     for autotext in autotexts:
-        autotext.set_fontsize(14)
-        autotext.set_weight('bold')
-    
-        # 设置百分比字体大小（在绘制后单独设置）
-    for autotext in autotexts:
-        autotext.set_fontsize(14)  # 可以调整这个数值，比如14、16、18等
+        autotext.set_fontsize(18)
         autotext.set_weight('bold')
         
         # 设置标题
