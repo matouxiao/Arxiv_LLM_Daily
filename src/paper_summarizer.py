@@ -648,53 +648,123 @@ arXiv链接：{paper['entry_id']}
             print(f"\n从 {len(paper_data_list)} 篇论文中筛选出 {len(representative_papers)} 篇代表性论文")
             
             # 5. 构建代表性论文的摘要文本（用于 LLM 分析）
-            representative_summaries = []
+            # 按聚类排名排序，并按聚类分组
+            from collections import defaultdict
+            cluster_groups = defaultdict(list)
             for paper in representative_papers:
-                summary_text = f"""
+                cluster_rank = paper.get('_cluster_rank', 999)
+                cluster_id = paper.get('_cluster_id', -1)
+                cluster_size = paper.get('_cluster_size', 0)
+                if cluster_id != -1:  # 排除噪声点
+                    cluster_groups[cluster_rank].append({
+                        'paper': paper,
+                        'cluster_id': cluster_id,
+                        'cluster_size': cluster_size
+                    })
+            
+            # 按聚类排名排序（从小到大，即从大到小）
+            sorted_cluster_ranks = sorted(cluster_groups.keys())
+            
+            # 构建每个聚类的摘要文本
+            cluster_summaries = []
+            cluster_info = []  # 保存聚类信息用于prompt
+            
+            for rank in sorted_cluster_ranks:
+                cluster_items = cluster_groups[rank]
+                if not cluster_items:
+                    continue
+                
+                # 获取聚类信息（所有论文的聚类信息应该相同）
+                cluster_id = cluster_items[0]['cluster_id']
+                cluster_size = cluster_items[0]['cluster_size']
+                
+                cluster_info.append({
+                    'rank': rank,
+                    'size': cluster_size,
+                    'id': cluster_id
+                })
+                
+                # 构建该聚类的论文摘要
+                cluster_paper_summaries = []
+                for item in cluster_items:
+                    paper = item['paper']
+                    summary_text = f"""
 标题：{paper.get('title', 'Unknown')}
 关键词：{paper.get('keywords', '')}
 核心痛点：{paper.get('core_pain_point', '')}
 技术创新：{paper.get('technical_innovation', '')}
 总结：{paper.get('summary', '')}
 """
-                representative_summaries.append(summary_text.strip())
+                    cluster_paper_summaries.append(summary_text.strip())
+                
+                cluster_summary = f"""
+【聚类 {rank + 1}】（包含 {cluster_size} 篇论文，按大小排名第 {rank + 1}）
+{chr(10).join(cluster_paper_summaries)}
+"""
+                cluster_summaries.append(cluster_summary.strip())
             
-            summaries_for_analysis = "\n\n---\n\n".join(representative_summaries)
+            # 检查是否有有效的聚类信息
+            if not cluster_info:
+                print("警告：没有有效的聚类信息，使用降级策略")
+                return (self._generate_trend_analysis_fallback(papers, paper_data_list), labels, embeddings)
+            
+            # 确保 cluster_info 的数量与 actual_cluster_count 一致
+            if len(cluster_info) != actual_cluster_count:
+                print(f"警告：聚类信息数量({len(cluster_info)})与聚类数量({actual_cluster_count})不一致，使用实际聚类信息数量")
+                actual_cluster_count = len(cluster_info)
+            
+            summaries_for_analysis = "\n\n" + "="*60 + "\n\n".join(cluster_summaries)
+            
+            # 构建聚类大小信息字符串
+            cluster_size_info = "\n".join([
+                f"- 聚类 {i+1}（排名第 {i+1}，包含 {info['size']} 篇论文）"
+                for i, info in enumerate(cluster_info)
+            ])
+            
+            # 构建格式示例中的聚类大小信息（用于prompt中的示例）
+            def get_cluster_size_example(index):
+                if index < len(cluster_info):
+                    return f"{cluster_info[index]['size']}"
+                return 'N/A'
             
             # 6. 调用 LLM 生成趋势报告
             analysis_prompt = f"""
-你是一名科技情报分析师。以下是今日 Arxiv 更新的大模型(LLM)领域论文中，通过聚类算法筛选出的 {len(representative_papers)} 篇代表性论文的详细摘要。
+你是一名科技情报分析师。以下是今日 Arxiv 更新的大模型(LLM)领域论文中，通过聚类算法筛选出的代表性论文的详细摘要。
 
-这些论文已经过智能聚类，共分为 **{actual_cluster_count} 个研究热点**。请基于这些摘要内容，生成一份趋势简报。
+这些论文已经过智能聚类，共分为 **{actual_cluster_count} 个研究热点**。每个聚类的论文数量如下（按大小从大到小排序）：
+
+{cluster_size_info}
 
 **重要要求：**
 1. 必须生成 **恰好 {actual_cluster_count} 个**核心研究热点，不能多也不能少。
-2. 根据摘要中的"关键词"、"核心痛点"、"技术创新"等信息，将论文归纳为这 {actual_cluster_count} 个研究热点（如：RAG优化、多模态、推理加速、安全对齐等）。
-3. 每个热点下，写一句简短的"赛道观察"（说明该方向今天的技术突破点或关注点）。
-4. 列出属于该热点的最具代表性的论文标题（只列标题）。
+2. **必须按照聚类大小从大到小排序**：第一个热点对应最大的聚类（{get_cluster_size_example(0)} 篇论文），第二个热点对应第二大的聚类（{get_cluster_size_example(1)} 篇论文），以此类推。
+3. 每个热点必须对应一个聚类，不能合并多个聚类。
+4. 根据摘要中的"关键词"、"核心痛点"、"技术创新"等信息，为每个聚类归纳一个研究热点名称（如：RAG优化、多模态、推理加速、安全对齐等）。
+5. 每个热点下，写一句简短的"赛道观察"（说明该方向今天的技术突破点或关注点）。
+6. 列出属于该热点的论文标题（只列标题，这些论文来自对应的聚类）。
 
-请严格遵循以下 Markdown 格式输出：
+请严格遵循以下 Markdown 格式输出，**必须按照聚类大小从大到小排序**：
 
 ## 📊 今日趋势速览 (Trend Analysis)
 
-### 🔥 [热点方向名称1]
+### 🔥 [热点方向名称1]（对应最大聚类，{get_cluster_size_example(0)} 篇论文）
 > **赛道观察：** (一句话概括该方向今天的技术突破点或关注点)
 - (论文标题1)
 - (论文标题2)
 
-### 🔥 [热点方向名称2]
+### 🔥 [热点方向名称2]（对应第二大聚类，{get_cluster_size_example(1)} 篇论文）
 > **赛道观察：** ...
 - ...
 
-### 🔥 [热点方向名称3]
+### 🔥 [热点方向名称3]（对应第三大聚类，{get_cluster_size_example(2)} 篇论文）
 > **赛道观察：** ...
 - ...
 
-（继续直到生成 {actual_cluster_count} 个热点）
+（继续直到生成 {actual_cluster_count} 个热点，严格按照聚类大小从大到小排序）
 
 ---
 
-待分析的代表性论文摘要：
+待分析的代表性论文摘要（已按聚类分组）：
 {summaries_for_analysis}
 """
             

@@ -168,7 +168,8 @@ class Mailer:
                 ul_content = re.sub(r'</li>\s*<li>', r'</li><br><li>', ul_content)
                 # 如果列表项后面没有<br>，添加一个
                 ul_content = re.sub(r'</li>(?!\s*<br>)', r'</li><br>', ul_content)
-                return f'</blockquote><br><ul>{ul_content}</ul>'
+                # 添加特殊标记，表示这个ul已经被处理过了
+                return f'</blockquote><br><ul data-processed="blockquote">{ul_content}</ul>'
             
             # 匹配blockquote后面的ul列表（"赛道观察"部分），添加特殊标记以便后续识别
             html_body = re.sub(r'</blockquote>\s*<ul>(.*?)</ul>', process_blockquote_list, html_body, flags=re.DOTALL)
@@ -176,6 +177,11 @@ class Mailer:
             # 5. 对于论文信息字段的列表项（包含 "**" 的，如 **中文标题**:），移除它们之间的<br>
             # 让它们像自然换行一样显示，没有空行
             def process_info_list(match):
+                ul_full = match.group(0)
+                # 如果这个ul已经被处理过了（blockquote后面的），跳过
+                if 'data-processed="blockquote"' in ul_full:
+                    return ul_full
+                
                 ul_content = match.group(1)
                 # 如果列表项内容包含 "**"（论文信息字段），移除它们之间的<br>
                 if '**' in ul_content:
@@ -184,12 +190,15 @@ class Mailer:
                 return f'<ul>{ul_content}</ul>'
             
             # 匹配所有ul列表，处理论文信息字段
-            # 使用负向前瞻，排除紧跟在blockquote后面的ul（它们已经在步骤4处理过了）
-            html_body = re.sub(r'(?<!</blockquote>\s*)<ul>(.*?)</ul>', process_info_list, html_body, flags=re.DOTALL)
+            # 排除已经被处理过的blockquote后面的ul
+            html_body = re.sub(r'<ul>(.*?)</ul>', process_info_list, html_body, flags=re.DOTALL)
             
             # 移除列表结束标签前的多余 <br>（但保留列表项之间的<br>）
             html_body = re.sub(r'<br>\s*</ul>', r'</ul>', html_body)
             html_body = re.sub(r'<br>\s*</ol>', r'</ol>', html_body)
+            
+            # 清理临时标记
+            html_body = re.sub(r' data-processed="blockquote"', '', html_body)
             
             # 5. 修复"赛道观察"部分：确保引用块（blockquote）和列表项之间有换行
             # 处理 </blockquote> 后直接跟着 <ul> 或 <li> 的情况
