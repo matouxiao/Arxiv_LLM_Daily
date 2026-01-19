@@ -111,7 +111,7 @@ class Mailer:
                         # 确保每个列表项之间有换行，但不要有额外的空白
                         list_items_html = '<br>'.join([f'<li>{item.strip()}</li>' for item in list_items])
                         
-                        return f'<blockquote><p>{text_part}</p></blockquote><br><ul class="blockquote-list">{list_items_html}</ul>'
+                        return f'<blockquote><p>{text_part}</p></blockquote><ul class="blockquote-list">{list_items_html}</ul>'
                 
                 return blockquote_full
             
@@ -175,7 +175,7 @@ class Mailer:
                 ul_content = re.sub(r'</li>\s+<br>\s+<li>', r'</li><br><li>', ul_content)
                 
                 # 添加特殊标记，表示这个ul已经被处理过了
-                return f'</blockquote><br><ul data-processed="blockquote" class="blockquote-list">{ul_content}</ul>'
+                return f'</blockquote><ul data-processed="blockquote" class="blockquote-list">{ul_content}</ul>'
             
             # 匹配blockquote后面的ul列表（"赛道观察"部分），添加特殊标记以便后续识别
             html_body = re.sub(r'</blockquote>\s*<ul>(.*?)</ul>', process_blockquote_list, html_body, flags=re.DOTALL)
@@ -239,6 +239,22 @@ class Mailer:
         margin-top: 0;
     }}
     /* "赛道观察"部分的列表项（论文标题）之间需要换行，但不要空行 */
+    blockquote {{
+        margin: 0 !important;
+        margin-bottom: 0 !important;
+        padding: 0 !important;
+    }}
+    blockquote p {{
+        margin: 0 !important;
+        margin-bottom: 0 !important;
+        padding: 0 !important;
+    }}
+    blockquote + ul.blockquote-list {{
+        margin: 0 !important;
+        padding: 0 !important;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }}
     ul.blockquote-list {{
         margin: 0 !important;
         padding: 0 !important;
