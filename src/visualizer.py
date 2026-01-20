@@ -71,8 +71,11 @@ def generate_decision_pie_chart(
         colors=chart_colors,
         autopct='%1.1f%%',
         startangle=90,
+        radius=1.0,   # ← 关键
         textprops={'fontsize': 14, 'weight': 'bold'}
     )
+    ax.set_aspect('equal')
+
     
     # 设置百分比字体大小（在绘制后单独设置）
     for autotext in autotexts:
@@ -86,12 +89,11 @@ def generate_decision_pie_chart(
     total = sum(sizes)
     fig.text(0.5, 0.02, f'总计: {total} 篇论文', ha='center', fontsize=10, style='italic')
     
-    plt.tight_layout()
     
     # 保存图片
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white')
+    plt.savefig(output_path, dpi=150, facecolor='white')
     plt.close()
     
     print(f"✅ 饼图已保存到: {output_path}")
@@ -165,9 +167,10 @@ def generate_trend_pie_chart(
         colors=colors_rgba,
         autopct='%1.1f%%',
         startangle=90,
+        radius=1.0,   # ← 关键
         textprops={'fontsize': 14, 'weight': 'bold'}
     )
-
+    ax.set_aspect('equal')
         # 设置百分比字体大小（在绘制后单独设置）
     for autotext in autotexts:
         autotext.set_fontsize(18)  # 可以调整这个数值，比如14、16、18等
@@ -181,12 +184,11 @@ def generate_trend_pie_chart(
     fig.text(0.5, 0.02, f'总计: {total} 篇论文，{len(cluster_labels)} 个研究热点', 
              ha='center', fontsize=10, style='italic')
     
-    plt.tight_layout()
     
     # 保存图片
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white')
+    plt.savefig(output_path, dpi=150, facecolor='white')
     plt.close()
     
     print(f"✅ 趋势饼图已保存到: {output_path}")
@@ -246,9 +248,11 @@ def generate_keywords_pie_chart(
         colors=colors,
         autopct='%1.1f%%',
         startangle=90,
+        radius=1.0,   # 
         textprops={'fontsize': 14}
     )
-    
+    ax.set_aspect('equal')
+
     # 设置百分比字体大小（在绘制后单独设置）
     for autotext in autotexts:
         autotext.set_fontsize(18)
@@ -262,12 +266,11 @@ def generate_keywords_pie_chart(
     fig.text(0.5, 0.02, f'基于 {total_papers} 篇论文的关键词统计（Top {top_n}）', 
              ha='center', fontsize=10, style='italic')
     
-    plt.tight_layout()
     
     # 保存图片
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white')
+    plt.savefig(output_path, dpi=150,facecolor='white')
     plt.close()
     
     print(f"✅ 关键词饼图已保存到: {output_path}")
