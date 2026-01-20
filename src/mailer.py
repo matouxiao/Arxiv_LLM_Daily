@@ -91,30 +91,25 @@ class Mailer:
             # 0. 先处理"赛道观察"部分：分离引用块内的列表项
             # 如果引用块内包含列表项模式（文本后跟着 " - " 或 "\n- "），需要分离
             def separate_blockquote_list(match):
-                blockquote_full = match.group(0)
-                blockquote_content = match.group(1)
+                blockquote_content = match.group(1).strip()
                 
-                # 检查引用块内容中是否包含列表项模式
-                # 查找 " - " 或 "\n- " 后面跟着大写字母开头的文本（论文标题）
-                # 这种情况说明列表项被错误地包含在引用块内
-                if re.search(r'[^\n]\s+-\s+[A-Z]', blockquote_content) or re.search(r'\n\s*-\s+[A-Z]', blockquote_content):
-                    # 分离：找到第一个 " - " 或 "\n- " 作为分隔点
-                    # 将引用块内容分为文本部分和列表项部分
-                    # 使用更精确的匹配：查找 " - " 后面跟着大写字母（论文标题）
-                    match_obj = re.search(r'([^\n]+?)\s+(-\s+[A-Z][^\n]*(?:\n\s*-\s+[A-Z][^\n]*)*)', blockquote_content, re.DOTALL)
-                    if match_obj:
-                        text_part = match_obj.group(1).strip()  # 文本部分
-                        list_items_text = match_obj.group(2)  # 列表项文本（包含 "- " 前缀）
-                        
-                        # 将列表项文本转换为多个 <li> 标签
-                        list_items = re.findall(r'-\s+([^\n]+)', list_items_text)
-                        # 确保每个列表项之间有换行，但不要有额外的空白
-                        list_items_html = '<br>'.join([f'<li>{item.strip()}</li>' for item in list_items])
-                        
-                        return f'<blockquote><p>{text_part}</p></blockquote><ul class="blockquote-list">{list_items_html}</ul>'
-                
-                return blockquote_full
+                # 增加对引导符的清理：移除可能存在的 > 或 &gt;
+                blockquote_content = re.sub(r'^[ \t]*(&gt;|>)[ \t]*', '', blockquote_content, flags=re.MULTILINE)
             
+                # 匹配文本和列表
+                match_obj = re.search(r'(.*?)\s+(-\s+[A-Z].*)', blockquote_content, re.DOTALL)
+                if match_obj:
+                    text_part = match_obj.group(1).strip()
+                    list_items_text = match_obj.group(2).strip()
+                    
+                    # 提取标题
+                    list_items = re.findall(r'-\s+([^\n]+)', list_items_text)
+                    list_items_html = ''.join([f'<li>{item.strip()}</li>' for item in list_items])
+                    
+                    # 返回时不带任何可能触发二次引用的符号
+                    return f'<div class="trend-observe"><p>{text_part}</p></div><ul class="blockquote-list">{list_items_html}</ul>'
+                
+                return f'<blockquote>{blockquote_content}</blockquote>'
             # 匹配引用块，检查是否需要分离列表项（在步骤2之前处理）
             html_body = re.sub(r'<blockquote>(.*?)</blockquote>', separate_blockquote_list, html_body, flags=re.DOTALL)
             
@@ -216,15 +211,30 @@ class Mailer:
             
             # 清理临时标记（但保留class属性，用于CSS样式）
             html_body = re.sub(r' data-processed="blockquote"', '', html_body)
-                        # 移除孤立的 blockquote 遗留符号
+                        # 在 src/mailer.py 约 180 行左右，styled_html 定义之前添加
+            # 移除所有 HTML 标签外的孤立引用符号
+            html_body = re.sub(r'</p>\s*&gt;\s*<ul', r'</p><ul', html_body)
+            html_body = re.sub(r'</blockquote>\s*&gt;\s*<ul', r'</blockquote><ul', html_body)
+
+            # 处理转义后的 &gt; 和原始的 >
             html_body = re.sub(r'(?m)^\s*&gt;\s*$', '', html_body)
             html_body = re.sub(r'(?m)^\s*>\s*$', '', html_body)
-            
+
             
             # 添加CSS样式确保列表项正确换行显示
             styled_html = f"""<html>
 <head>
 <style>
+    .trend-observe {{
+        border-left: 4px solid #ddd;
+        padding: 5px 0 5px 15px !important;
+        margin: 10px 0 5px 0 !important;
+        background-color: #f9f9f9;
+    }}
+    .trend-observe p {{
+        font-weight: bold;
+        color: #555;
+    }}
     body {{
         font-family: Arial, sans-serif;
         line-height: 1.6;
