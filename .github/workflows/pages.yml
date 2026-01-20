@@ -77,7 +77,7 @@ jobs:
           }
           
           # 搜索查询配置 (核心筛选逻辑)
-          QUERY = '("Large Language Model" OR "LLM" OR "Generative AI" OR "Transformer" OR "RAG" OR "Chain of Thought" OR "RL" OR "Agent" OR "Multimodal" OR "Audio Recognition Understanding Generation")'
+          QUERY = '("Large Language Model" OR "LLM" OR "Generative AI" OR "Transformer" OR "RAG" OR "Chain of Thought" OR "RL" OR "Agent" OR "Multimodal" OR "Continual Learning" OR "Memory" OR "Agentic Search" OR "Audio Recognition Understanding Generation")'
           
           # 语言模型API配置 (DashScope / DeepSeek)
           LLM_CONFIG = {
