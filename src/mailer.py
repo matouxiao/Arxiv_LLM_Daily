@@ -154,8 +154,14 @@ class Mailer:
                 return f'<ul>{content}</ul>'
             
             # 匹配连续的列表项（至少2个），它们之间可能有空白或 <br>
-            html_body = re.sub(r'(<li>[^<]+</li>(?:\s*(?:<br\s*/?>)?\s*<li>[^<]+</li>)+)', wrap_li_sequence, html_body)
-            
+            # 更稳健：基于标签而不是内容
+            html_body = re.sub(
+                r'((?:<li>.*?</li>\s*){2,})',
+                lambda m: f"<ul>{m.group(1)}</ul>",
+                html_body,
+                flags=re.DOTALL
+            )
+
             # 3. 确保列表项正确换行
             # 先移除列表项内容中的 <p> 标签（如果存在）
             html_body = re.sub(r'<li>\s*<p>', r'<li>', html_body)
@@ -197,7 +203,12 @@ class Mailer:
             
             # 匹配所有ul列表，处理论文信息字段
             # 排除已经被处理过的blockquote后面的ul
-            html_body = re.sub(r'<ul>(.*?)</ul>', process_info_list, html_body, flags=re.DOTALL)
+            html_body = re.sub(
+                r'<ul(?![^>]*class="blockquote-list")(.*?)</ul>',
+                process_info_list,
+                html_body,
+                flags=re.DOTALL
+            )
             
             # 移除列表结束标签前的多余 <br>（但保留列表项之间的<br>）
             html_body = re.sub(r'<br>\s*</ul>', r'</ul>', html_body)
@@ -205,6 +216,10 @@ class Mailer:
             
             # 清理临时标记（但保留class属性，用于CSS样式）
             html_body = re.sub(r' data-processed="blockquote"', '', html_body)
+                        # 移除孤立的 blockquote 遗留符号
+            html_body = re.sub(r'(?m)^\s*&gt;\s*$', '', html_body)
+            html_body = re.sub(r'(?m)^\s*>\s*$', '', html_body)
+            
             
             # 添加CSS样式确保列表项正确换行显示
             styled_html = f"""<html>
