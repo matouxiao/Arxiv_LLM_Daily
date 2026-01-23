@@ -89,11 +89,13 @@ def generate_decision_pie_chart(
     total = sum(sizes)
     fig.text(0.5, 0.02, f'总计: {total} 篇论文', ha='center', fontsize=10, style='italic')
     
+    # 调整布局，防止标签被截断
+    plt.tight_layout()
     
     # 保存图片
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150, facecolor='white')
+    plt.savefig(output_path, dpi=150, facecolor='white', bbox_inches='tight')
     plt.close()
     
     print(f"✅ 饼图已保存到: {output_path}")
@@ -184,11 +186,13 @@ def generate_trend_pie_chart(
     fig.text(0.5, 0.02, f'总计: {total} 篇论文，{len(cluster_labels)} 个研究热点', 
              ha='center', fontsize=10, style='italic')
     
+    # 调整布局，防止标签被截断
+    plt.tight_layout()
     
     # 保存图片
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150, facecolor='white')
+    plt.savefig(output_path, dpi=150, facecolor='white', bbox_inches='tight')
     plt.close()
     
     print(f"✅ 趋势饼图已保存到: {output_path}")
@@ -266,11 +270,13 @@ def generate_keywords_pie_chart(
     fig.text(0.5, 0.02, f'基于 {total_papers} 篇论文的关键词统计（Top {top_n}）', 
              ha='center', fontsize=10, style='italic')
     
+    # 调整布局，防止标签被截断
+    plt.tight_layout()
     
     # 保存图片
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150,facecolor='white')
+    plt.savefig(output_path, dpi=150, facecolor='white', bbox_inches='tight')
     plt.close()
     
     print(f"✅ 关键词饼图已保存到: {output_path}")
