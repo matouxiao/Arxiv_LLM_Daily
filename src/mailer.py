@@ -1,5 +1,6 @@
 import os
 import smtplib
+import ssl
 import markdown
 import base64
 from email.mime.text import MIMEText
@@ -9,6 +10,7 @@ from email.header import Header
 from datetime import datetime
 from pathlib import Path
 import pytz  # 添加时区支持
+import time
 
 class Mailer:
     def __init__(self):
@@ -340,9 +342,38 @@ class Mailer:
             # 解析收件人列表
             receivers = [r.strip() for r in self.receiver_email.split(',')]
             
+            # 创建 SSL 上下文，增强连接稳定性
+            context = ssl.create_default_context()
+            # 设置超时时间
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            
             # 建立一次连接，循环发送给多个人
-            server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port)
-            server.login(self.sender_email, self.sender_password)
+            # 使用 SSL 上下文和超时设置，增加重试机制
+            max_retries = 3
+            retry_delay = 5
+            server = None
+            
+            for attempt in range(max_retries):
+                try:
+                    server = smtplib.SMTP_SSL(
+                        self.smtp_server, 
+                        self.smtp_port,
+                        timeout=30,  # 30秒超时
+                        context=context
+                    )
+                    server.login(self.sender_email, self.sender_password)
+                    break  # 连接成功，跳出重试循环
+                except (smtplib.SMTPException, ssl.SSLError, OSError) as conn_e:
+                    if attempt < max_retries - 1:
+                        print(f"⚠️ SMTP 连接失败 (尝试 {attempt + 1}/{max_retries}): {conn_e}")
+                        print(f"   等待 {retry_delay} 秒后重试...")
+                        time.sleep(retry_delay)
+                    else:
+                        raise Exception(f"SMTP 连接失败，已重试 {max_retries} 次: {conn_e}")
+            
+            if server is None:
+                raise Exception("无法建立 SMTP 连接")
             
             # 使用北京时区的日期
             beijing_date = self._get_beijing_date()
@@ -374,9 +405,18 @@ class Mailer:
                 except Exception as inner_e:
                     print(f"❌ 向 {recipient} 发送失败: {inner_e}")
             
-            server.quit()
+            # 确保连接正确关闭
+            try:
+                server.quit()
+            except:
+                try:
+                    server.close()
+                except:
+                    pass
         except Exception as e:
             print(f"❌ 邮件发送流程出错: {e}")
+            import traceback
+            traceback.print_exc()
     
     def send_no_papers_message(self):
         """发送没有新论文的消息"""
@@ -404,9 +444,38 @@ class Mailer:
             # 解析收件人列表
             receivers = [r.strip() for r in self.receiver_email.split(',')]
             
+            # 创建 SSL 上下文，增强连接稳定性
+            context = ssl.create_default_context()
+            # 设置超时时间
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            
             # 建立一次连接，循环发送给多个人
-            server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port)
-            server.login(self.sender_email, self.sender_password)
+            # 使用 SSL 上下文和超时设置，增加重试机制
+            max_retries = 3
+            retry_delay = 5
+            server = None
+            
+            for attempt in range(max_retries):
+                try:
+                    server = smtplib.SMTP_SSL(
+                        self.smtp_server, 
+                        self.smtp_port,
+                        timeout=30,  # 30秒超时
+                        context=context
+                    )
+                    server.login(self.sender_email, self.sender_password)
+                    break  # 连接成功，跳出重试循环
+                except (smtplib.SMTPException, ssl.SSLError, OSError) as conn_e:
+                    if attempt < max_retries - 1:
+                        print(f"⚠️ SMTP 连接失败 (尝试 {attempt + 1}/{max_retries}): {conn_e}")
+                        print(f"   等待 {retry_delay} 秒后重试...")
+                        time.sleep(retry_delay)
+                    else:
+                        raise Exception(f"SMTP 连接失败，已重试 {max_retries} 次: {conn_e}")
+            
+            if server is None:
+                raise Exception("无法建立 SMTP 连接")
             
             for recipient in receivers:
                 try:
@@ -421,6 +490,15 @@ class Mailer:
                 except Exception as inner_e:
                     print(f"❌ 向 {recipient} 发送失败: {inner_e}")
             
-            server.quit()
+            # 确保连接正确关闭
+            try:
+                server.quit()
+            except:
+                try:
+                    server.close()
+                except:
+                    pass
         except Exception as e:
             print(f"❌ 邮件发送流程出错: {e}")
+            import traceback
+            traceback.print_exc()
